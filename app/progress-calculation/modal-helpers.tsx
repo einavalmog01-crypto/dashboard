@@ -188,17 +188,46 @@ export function StoryModal({
                 onChange={e => {
                   const file = e.target.files?.[0]
                   if (file) {
-                    setForm({
-                      ...form,
-                      attachments: [...form.attachments, { name: file.name, url: URL.createObjectURL(file) }],
-                    })
+                    // Convert file to base64 data URL for persistence in localStorage
+                    const reader = new FileReader()
+                    reader.onload = () => {
+                      const dataUrl = reader.result as string
+                      setForm(prev => ({
+                        ...prev,
+                        attachments: [...prev.attachments, { name: file.name, url: dataUrl }],
+                      }))
+                    }
+                    reader.readAsDataURL(file)
                   }
                 }}
               />
               {form.attachments.length > 0 && (
-                <span className="text-xs text-muted-foreground">
-                  Attached: {form.attachments.map(a => a.name).join(", ")}
-                </span>
+                <div className="space-y-1 mt-2">
+                  <span className="text-xs text-muted-foreground">Attachments:</span>
+                  {form.attachments.map((a, idx) => (
+                    <div key={idx} className="flex items-center gap-2 text-sm">
+                      <a 
+                        href={a.url} 
+                        download={a.name}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-blue-600 hover:underline"
+                      >
+                        {a.name}
+                      </a>
+                      <button
+                        type="button"
+                        onClick={() => setForm(prev => ({
+                          ...prev,
+                          attachments: prev.attachments.filter((_, i) => i !== idx)
+                        }))}
+                        className="text-red-500 hover:text-red-700 text-xs"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  ))}
+                </div>
               )}
             </div>
           </div>
