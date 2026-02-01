@@ -41,8 +41,10 @@ export async function POST(request: Request) {
 
     // Route to the appropriate test handler
     switch (testId) {
-      case "cable-submit-order":
-        return await runCableSubmitOrder(config, environment)
+      case "cable-retail-submit-order":
+        return await runCableSubmitOrder(config, environment, "Retail")
+      case "cable-telesales-submit-order":
+        return await runCableSubmitOrder(config, environment, "Telesales")
       default:
         // For other tests, simulate execution
         return await runGenericTest(testId, testName, config)
@@ -58,19 +60,20 @@ export async function POST(request: Request) {
 
 async function runCableSubmitOrder(
   config: TestRunRequest["config"],
-  environment: string
+  environment: string,
+  channel: "Retail" | "Telesales"
 ) {
   const { auth, db, endpoint } = config
 
   // Generate random OrderID
   const orderId = Math.floor(100000000 + Math.random() * 900000000).toString()
-  console.log(`[CableSubmitOrder] Generated OrderID: ${orderId}`)
+  console.log(`[Cable${channel}SubmitOrder] Generated OrderID: ${orderId}`)
 
   const steps: { name: string; status: "PASS" | "FAILED"; message: string }[] = []
 
   try {
     // STEP 1: SubmitOrder (GenerateContract)
-    console.log(`[CableSubmitOrder] Step 1: SubmitOrder (GenerateContract)`)
+    console.log(`[Cable${channel}SubmitOrder] Step 1: SubmitOrder (GenerateContract)`)
     
     const submitOrderXml = buildSubmitOrderXml(orderId, "GenerateContract")
     
@@ -101,12 +104,12 @@ async function runCableSubmitOrder(
       throw new Error("OGWOrderID not found in GenerateContract response")
     }
     const ogwOrderId = ogwOrderIdMatch[1]
-    console.log(`[CableSubmitOrder] Extracted OGWOrderID: ${ogwOrderId}`)
+    console.log(`[Cable${channel}SubmitOrder] Extracted OGWOrderID: ${ogwOrderId}`)
 
     steps.push({ name: "SubmitOrder (GenerateContract)", status: "PASS", message: `OGWOrderID: ${ogwOrderId}` })
 
     // STEP 2: SubmitOrder (Fulfillment)
-    console.log(`[CableSubmitOrder] Step 2: SubmitOrder (Fulfillment)`)
+    console.log(`[Cable${channel}SubmitOrder] Step 2: SubmitOrder (Fulfillment)`)
     
     const fulfillmentXml = buildSubmitOrderXml(orderId, "Fulfillment", ogwOrderId)
     
@@ -133,7 +136,7 @@ async function runCableSubmitOrder(
     steps.push({ name: "SubmitOrder (Fulfillment)", status: "PASS", message: "Fulfillment submitted" })
 
     // STEP 3: SetOrderStatus
-    console.log(`[CableSubmitOrder] Step 3: SetOrderStatus`)
+    console.log(`[Cable${channel}SubmitOrder] Step 3: SetOrderStatus`)
     
     const setOrderStatusXml = buildSetOrderStatusXml(ogwOrderId)
     
@@ -159,18 +162,19 @@ async function runCableSubmitOrder(
 
     steps.push({ name: "SetOrderStatus", status: "PASS", message: "Order status set successfully" })
 
-    console.log(`[CableSubmitOrder] All steps completed successfully for OGWOrderID: ${ogwOrderId}`)
+    console.log(`[Cable${channel}SubmitOrder] All steps completed successfully for OGWOrderID: ${ogwOrderId}`)
 
     return NextResponse.json({
       success: true,
       orderId,
       ogwOrderId,
+      channel,
       steps,
-      message: `Cable Submit Order completed successfully. OGWOrderID: ${ogwOrderId}`,
+      message: `Cable ${channel} Submit Order completed successfully. OGWOrderID: ${ogwOrderId}`,
     })
 
   } catch (error) {
-    console.error(`[CableSubmitOrder] Error:`, error)
+    console.error(`[Cable${channel}SubmitOrder] Error:`, error)
     return NextResponse.json({
       success: false,
       orderId,

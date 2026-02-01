@@ -20,8 +20,17 @@ interface TestCase {
 
 const initialTests: TestCase[] = [
   { 
-    id: "cable-submit-order", 
-    name: "Cable Submit Order", 
+    id: "cable-retail-submit-order", 
+    name: "Cable Retail Submit Order", 
+    suite: "Cable", 
+    description: "SubmitOrder (GenerateContract + Fulfillment) + SetOrderStatus flow",
+    status: "idle", 
+    selected: false, 
+    comment: "" 
+  },
+  { 
+    id: "cable-telesales-submit-order", 
+    name: "Cable Telesales Submit Order", 
     suite: "Cable", 
     description: "SubmitOrder (GenerateContract + Fulfillment) + SetOrderStatus flow",
     status: "idle", 
