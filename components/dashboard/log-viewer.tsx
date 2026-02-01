@@ -27,8 +27,6 @@ export function LogViewer({
   environmentConfig,
   onClose,
 }: LogViewerProps) {
-  if (!isOpen) return null
-
   const [selectedServer, setSelectedServer] = useState<LogServer>("WF1")
   const [selectedFile, setSelectedFile] = useState<LogFile>("catalina.out")
   const [logContent, setLogContent] = useState<string>("")
@@ -64,6 +62,8 @@ export function LogViewer({
       return () => clearInterval(interval)
     }
   }, [autoRefresh, isOpen, selectedServer, selectedFile, environment])
+
+  if (!isOpen) return null
 
   const handleCopy = async () => {
     await navigator.clipboard.writeText(logContent)

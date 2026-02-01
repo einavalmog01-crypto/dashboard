@@ -236,7 +236,7 @@ export default function TestCasesPage() {
 
   return (
     <Suspense fallback={<LoadingFallback />}>
-      <DashboardLayout>
+      <DashboardLayout title="Test Cases" description="Create, organize, and manage your test cases">
         <div className="flex flex-col gap-6 p-6">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>

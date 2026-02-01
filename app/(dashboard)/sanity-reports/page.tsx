@@ -1,11 +1,11 @@
 "use client"
 
 import Link from "next/link"
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
+import { Card, CardHeader, CardTitle } from "@/components/ui/card"
 import { getReports } from "@/lib/sanity-reports"
 import { Badge } from "@/components/ui/badge"
 import jsPDF from "jspdf"
-import "jspdf-autotable"
+import autoTable from "jspdf-autotable"
 
 export default function SanityReportsPage() {
   const reports = getReports()
@@ -28,7 +28,7 @@ export default function SanityReportsPage() {
     doc.setFontSize(12)
     doc.text(`Created At: ${new Date(report.createdAt).toLocaleString()}`, 14, 28)
 
-    doc.autoTable({
+    autoTable(doc, {
       startY: 36,
       head: [["Test Name", "Status", "Comment"]],
       body: report.tests.map((t: any) => [

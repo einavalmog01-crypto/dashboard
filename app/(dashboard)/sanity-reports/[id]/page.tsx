@@ -3,7 +3,7 @@
 import { useRouter, useParams } from "next/navigation"
 import { getReportById } from "@/lib/sanity-reports"
 import jsPDF from "jspdf"
-import "jspdf-autotable"
+import autoTable from "jspdf-autotable"
 
 export default function SanityReportPage() {
   const router = useRouter()
@@ -35,7 +35,7 @@ export default function SanityReportPage() {
     doc.text(`Created At: ${new Date(report.createdAt).toLocaleString()}`, 14, 28)
 
     // Table
-    doc.autoTable({
+    autoTable(doc, {
       startY: 36,
       head: [["Test Name", "Status", "Comment"]],
       body: report.tests.map((t) => [
@@ -44,7 +44,7 @@ export default function SanityReportPage() {
         t.error || "-",
       ]),
       headStyles: { fillColor: [240, 240, 240], fontStyle: "bold" },
-      didParseCell: (data) => {
+      didParseCell: (data: any) => {
         if (data.section === "body" && data.column.index === 1) {
           // Color-code PASS/FAIL in Status column
           if (data.cell.raw === "PASS") {

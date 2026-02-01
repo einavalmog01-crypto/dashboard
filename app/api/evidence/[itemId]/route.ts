@@ -3,9 +3,10 @@ import path from "path";
 import { NextResponse } from "next/server";
 export async function GET(
   _: Request,
-  { params }: { params: { itemId: string } }
+  { params }: { params: Promise<{ itemId: string }> }
 ) {
-  const dir = path.join(process.cwd(), "public/evidence", params.itemId);
+  const { itemId } = await params;
+  const dir = path.join(process.cwd(), "public/evidence", itemId);
 if (!fs.existsSync(dir)) {
     return NextResponse.json([]);
   }

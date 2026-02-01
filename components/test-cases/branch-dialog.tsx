@@ -43,6 +43,7 @@ export default function BranchDialog({
       id: branch?.id ?? nanoid(),
       name,
       slug,
+      createdAt: branch?.createdAt ?? Date.now(),
     });
     onOpenChange(false);
   }
