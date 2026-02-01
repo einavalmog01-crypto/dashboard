@@ -1,11 +1,86 @@
 "use client"
 
+import { useEffect, useState } from "react"
 import { DashboardLayout } from "@/components/dashboard/dashboard-layout"
 import { StatsCard } from "@/components/dashboard/stats-card"
 import { RecentTests } from "@/components/dashboard/recent-tests"
-import { Play, CheckCircle, XCircle, Clock } from "lucide-react"
+import { Play, CheckCircle, XCircle, ListChecks } from "lucide-react"
+import type { SanityReport } from "@/lib/sanity-reports"
+
+interface DashboardStats {
+  totalTests: number
+  passed: number
+  failed: number
+  passRate: string
+  suiteStats: {
+    name: string
+    passed: number
+    total: number
+    percentage: number
+  }[]
+}
+
+function calculateStats(reports: SanityReport[]): DashboardStats {
+  let totalTests = 0
+  let passed = 0
+  let failed = 0
+
+  const suiteMap: Record<string, { passed: number; total: number }> = {
+    "FULL": { passed: 0, total: 0 },
+    "BASIC": { passed: 0, total: 0 },
+    "SELECTED": { passed: 0, total: 0 },
+    "SCHEDULED": { passed: 0, total: 0 },
+  }
+
+  for (const report of reports) {
+    for (const test of report.tests) {
+      totalTests++
+      if (test.status === "PASS") {
+        passed++
+        if (suiteMap[report.type]) {
+          suiteMap[report.type].passed++
+        }
+      } else {
+        failed++
+      }
+      if (suiteMap[report.type]) {
+        suiteMap[report.type].total++
+      }
+    }
+  }
+
+  const passRate = totalTests > 0 ? ((passed / totalTests) * 100).toFixed(1) : "0.0"
+
+  const suiteStats = Object.entries(suiteMap)
+    .filter(([_, data]) => data.total > 0)
+    .map(([name, data]) => ({
+      name: name === "FULL" ? "Full Sanity" : 
+            name === "BASIC" ? "Basic Sanity" : 
+            name === "SELECTED" ? "Selected Tests" : "Scheduled Tests",
+      passed: data.passed,
+      total: data.total,
+      percentage: data.total > 0 ? Math.round((data.passed / data.total) * 100) : 0,
+    }))
+
+  return { totalTests, passed, failed, passRate, suiteStats }
+}
 
 export default function DashboardPage() {
+  const [stats, setStats] = useState<DashboardStats>({
+    totalTests: 0,
+    passed: 0,
+    failed: 0,
+    passRate: "0.0",
+    suiteStats: [],
+  })
+
+  useEffect(() => {
+    // Load reports from localStorage
+    const raw = localStorage.getItem("sanityReports")
+    const reports: SanityReport[] = raw ? JSON.parse(raw) : []
+    setStats(calculateStats(reports))
+  }, [])
+
   return (
     <DashboardLayout
       title="Dashboard"
@@ -15,56 +90,58 @@ export default function DashboardPage() {
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
           <StatsCard
             title="Total Tests"
-            value={1284}
-            change="+12% from last week"
-            changeType="positive"
+            value={stats.totalTests}
+            change={`${stats.suiteStats.length} test suites run`}
+            changeType="neutral"
             icon={Play}
           />
           <StatsCard
             title="Passed"
-            value={1156}
-            change="90.0% pass rate"
-            changeType="positive"
+            value={stats.passed}
+            change={`${stats.passRate}% pass rate`}
+            changeType={parseFloat(stats.passRate) >= 80 ? "positive" : "negative"}
             icon={CheckCircle}
           />
           <StatsCard
             title="Failed"
-            value={98}
-            change="-3% from last week"
-            changeType="positive"
+            value={stats.failed}
+            change={stats.totalTests > 0 ? `${((stats.failed / stats.totalTests) * 100).toFixed(1)}% fail rate` : "No tests run"}
+            changeType={stats.failed === 0 ? "positive" : "negative"}
             icon={XCircle}
           />
           <StatsCard
-            title="Avg Duration"
-            value="2.4s"
-            change="-0.3s faster"
-            changeType="positive"
-            icon={Clock}
+            title="Test Suites"
+            value={stats.suiteStats.length}
+            change="Types of tests run"
+            changeType="neutral"
+            icon={ListChecks}
           />
         </div>
 
         <div className="grid gap-6 lg:grid-cols-2">
           <RecentTests />
-          <TestSuiteStatus />
+          <TestSuiteStatus suiteStats={stats.suiteStats} />
         </div>
       </div>
     </DashboardLayout>
   )
 }
 
-function TestSuiteStatus() {
-  const suites = [
-    { name: "Full Sanity", passed: 456, total: 478, percentage: 95 },
-    { name: "Basic Sanity", passed: 234, total: 256, percentage: 91 },
-    { name: "E2E Tests", passed: 89, total: 102, percentage: 87 },
-    { name: "UT Tests", passed: 89, total: 102, percentage: 87 },
-  ]
+function TestSuiteStatus({ suiteStats }: { suiteStats: DashboardStats["suiteStats"] }) {
+  if (suiteStats.length === 0) {
+    return (
+      <div className="rounded-lg border border-border bg-card p-6">
+        <h3 className="mb-4 text-lg font-semibold">Test Suite Status</h3>
+        <p className="text-muted-foreground text-sm">No tests have been run yet. Go to Test Runner to execute tests.</p>
+      </div>
+    )
+  }
 
   return (
     <div className="rounded-lg border border-border bg-card p-6">
       <h3 className="mb-4 text-lg font-semibold">Test Suite Status</h3>
       <div className="space-y-4">
-        {suites.map((suite) => (
+        {suiteStats.map((suite) => (
           <div key={suite.name}>
             <div className="flex justify-between text-sm">
               <span>{suite.name}</span>
@@ -72,7 +149,7 @@ function TestSuiteStatus() {
             </div>
             <div className="h-2 bg-secondary rounded">
               <div
-                className="h-full bg-primary rounded"
+                className={`h-full rounded ${suite.percentage >= 80 ? "bg-green-500" : suite.percentage >= 50 ? "bg-yellow-500" : "bg-red-500"}`}
                 style={{ width: `${suite.percentage}%` }}
               />
             </div>

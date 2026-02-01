@@ -15,7 +15,7 @@ export type SanityReport = {
   tests: SanityTestResult[]
 }
 
-const STORAGE_KEY = "sanity_reports"
+const STORAGE_KEY = "sanityReports"
 
 export function getReports(): SanityReport[] {
   if (typeof window === "undefined") return []

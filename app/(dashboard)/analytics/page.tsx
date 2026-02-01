@@ -31,120 +31,157 @@ import {
   Cell,
 } from "recharts";
 import {
-  TrendingUp,
-  TrendingDown,
   Clock,
   CheckCircle2,
   XCircle,
-  AlertTriangle,
   Activity,
   Zap,
 } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import type { SanityReport } from "@/lib/sanity-reports";
 
-const passRateData = [
-  { date: "Jan 1", passed: 85, failed: 15 },
-  { date: "Jan 2", passed: 88, failed: 12 },
-  { date: "Jan 3", passed: 82, failed: 18 },
-  { date: "Jan 4", passed: 90, failed: 10 },
-  { date: "Jan 5", passed: 87, failed: 13 },
-  { date: "Jan 6", passed: 92, failed: 8 },
-  { date: "Jan 7", passed: 94, failed: 6 },
-];
+function formatTimeAgo(dateString: string): string {
+  const date = new Date(dateString);
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMs / 3600000);
+  const diffDays = Math.floor(diffMs / 86400000);
 
-const executionTimeData = [
-  { suite: "Auth", time: 45 },
-  { suite: "E-comm", time: 120 },
-  { suite: "Perf", time: 180 },
-  { suite: "Infra", time: 60 },
-  { suite: "API", time: 90 },
-];
+  if (diffMins < 1) return "Just now";
+  if (diffMins < 60) return `${diffMins} min ago`;
+  if (diffHours < 24) return `${diffHours} hour${diffHours > 1 ? "s" : ""} ago`;
+  return `${diffDays} day${diffDays > 1 ? "s" : ""} ago`;
+}
 
-const testDistribution = [
-  { name: "Passed", value: 142, color: "var(--color-success)" },
-  { name: "Failed", value: 18, color: "var(--color-destructive)" },
-  { name: "Skipped", value: 8, color: "var(--color-warning)" },
-];
+interface AnalyticsData {
+  stats: {
+    totalRuns: number;
+    passRate: number;
+    testsExecuted: number;
+    environments: number;
+  };
+  passRateData: { date: string; passed: number; failed: number }[];
+  executionByEnv: { env: string; count: number }[];
+  testDistribution: { name: string; value: number; color: string }[];
+  recentRuns: {
+    id: string;
+    type: string;
+    environment: string;
+    status: "passed" | "failed";
+    tests: { passed: number; failed: number };
+    timestamp: string;
+  }[];
+  topFailures: { test: string; type: string; failures: number }[];
+}
 
-const recentRuns = [
-  {
-    id: "RUN-001",
-    suite: "Authentication Suite",
-    status: "passed",
-    duration: "2m 34s",
-    tests: { passed: 24, failed: 0, skipped: 1 },
-    timestamp: "10 minutes ago",
-  },
-  {
-    id: "RUN-002",
-    suite: "E-commerce Flow",
-    status: "failed",
-    duration: "5m 12s",
-    tests: { passed: 38, failed: 3, skipped: 0 },
-    timestamp: "25 minutes ago",
-  },
-  {
-    id: "RUN-003",
-    suite: "API Integration",
-    status: "passed",
-    duration: "1m 45s",
-    tests: { passed: 18, failed: 0, skipped: 0 },
-    timestamp: "1 hour ago",
-  },
-  {
-    id: "RUN-004",
-    suite: "Performance Tests",
-    status: "passed",
-    duration: "8m 20s",
-    tests: { passed: 12, failed: 0, skipped: 2 },
-    timestamp: "2 hours ago",
-  },
-  {
-    id: "RUN-005",
-    suite: "Infrastructure",
-    status: "failed",
-    duration: "3m 55s",
-    tests: { passed: 15, failed: 2, skipped: 0 },
-    timestamp: "3 hours ago",
-  },
-];
+function calculateAnalytics(reports: SanityReport[]): AnalyticsData {
+  const stats = {
+    totalRuns: reports.length,
+    passRate: 0,
+    testsExecuted: 0,
+    environments: 0,
+  };
 
-const topFailures = [
-  {
-    test: "Checkout payment processing",
-    suite: "E-commerce",
-    failures: 12,
-    trend: "up",
-  },
-  {
-    test: "Database connection timeout",
-    suite: "Infrastructure",
-    failures: 8,
-    trend: "down",
-  },
-  {
-    test: "Session expiration handling",
-    suite: "Authentication",
-    failures: 6,
-    trend: "up",
-  },
-  {
-    test: "Image upload validation",
-    suite: "API",
-    failures: 4,
-    trend: "stable",
-  },
-];
+  let totalPassed = 0;
+  let totalFailed = 0;
+  const envSet = new Set<string>();
+  const failureMap: Record<string, { type: string; count: number }> = {};
+  const dateMap: Record<string, { passed: number; failed: number }> = {};
+  const envCountMap: Record<string, number> = {};
+
+  for (const report of reports) {
+    envSet.add(report.environment || "Unknown");
+    envCountMap[report.environment || "Unknown"] = (envCountMap[report.environment || "Unknown"] || 0) + 1;
+
+    const reportDate = new Date(report.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+    if (!dateMap[reportDate]) {
+      dateMap[reportDate] = { passed: 0, failed: 0 };
+    }
+
+    for (const test of report.tests) {
+      stats.testsExecuted++;
+      if (test.status === "PASS") {
+        totalPassed++;
+        dateMap[reportDate].passed++;
+      } else {
+        totalFailed++;
+        dateMap[reportDate].failed++;
+        // Track failures
+        const key = test.testName;
+        if (!failureMap[key]) {
+          failureMap[key] = { type: report.type, count: 0 };
+        }
+        failureMap[key].count++;
+      }
+    }
+  }
+
+  stats.passRate = stats.testsExecuted > 0 ? parseFloat(((totalPassed / stats.testsExecuted) * 100).toFixed(1)) : 0;
+  stats.environments = envSet.size;
+
+  // Pass rate data (last 7 dates)
+  const passRateData = Object.entries(dateMap)
+    .map(([date, data]) => ({ date, passed: data.passed, failed: data.failed }))
+    .slice(-7);
+
+  // Execution by environment
+  const executionByEnv = Object.entries(envCountMap)
+    .map(([env, count]) => ({ env, count }))
+    .sort((a, b) => b.count - a.count);
+
+  // Test distribution
+  const testDistribution = [
+    { name: "Passed", value: totalPassed, color: "#22c55e" },
+    { name: "Failed", value: totalFailed, color: "#ef4444" },
+  ].filter(d => d.value > 0);
+
+  // Recent runs
+  const recentRuns = reports.slice(0, 10).map(report => {
+    const passed = report.tests.filter(t => t.status === "PASS").length;
+    const failed = report.tests.filter(t => t.status === "FAILED").length;
+    return {
+      id: report.id.slice(0, 8).toUpperCase(),
+      type: report.type,
+      environment: report.environment || "Unknown",
+      status: (failed === 0 ? "passed" : "failed") as "passed" | "failed",
+      tests: { passed, failed },
+      timestamp: formatTimeAgo(report.createdAt),
+    };
+  });
+
+  // Top failures
+  const topFailures = Object.entries(failureMap)
+    .map(([test, data]) => ({ test, type: data.type, failures: data.count }))
+    .sort((a, b) => b.failures - a.failures)
+    .slice(0, 5);
+
+  return {
+    stats,
+    passRateData,
+    executionByEnv,
+    testDistribution,
+    recentRuns,
+    topFailures,
+  };
+}
 
 export default function AnalyticsPage() {
   const [timeRange, setTimeRange] = useState("7d");
+  const [analytics, setAnalytics] = useState<AnalyticsData>({
+    stats: { totalRuns: 0, passRate: 0, testsExecuted: 0, environments: 0 },
+    passRateData: [],
+    executionByEnv: [],
+    testDistribution: [],
+    recentRuns: [],
+    topFailures: [],
+  });
 
-  const stats = {
-    totalRuns: 156,
-    passRate: 89.2,
-    avgDuration: "3m 24s",
-    testsExecuted: 2847,
-  };
+  useEffect(() => {
+    const raw = localStorage.getItem("sanityReports");
+    const reports: SanityReport[] = raw ? JSON.parse(raw) : [];
+    setAnalytics(calculateAnalytics(reports));
+  }, []);
 
   return (
     <div className="flex flex-col gap-6 p-6">
@@ -179,10 +216,9 @@ export default function AnalyticsPage() {
             <Activity className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats.totalRuns}</div>
-            <p className="text-xs text-muted-foreground flex items-center gap-1 mt-1">
-              <TrendingUp className="h-3 w-3 text-success" />
-              <span className="text-success">+12%</span> from last period
+            <div className="text-2xl font-bold">{analytics.stats.totalRuns}</div>
+            <p className="text-xs text-muted-foreground mt-1">
+              Sanity test runs executed
             </p>
           </CardContent>
         </Card>
@@ -192,13 +228,12 @@ export default function AnalyticsPage() {
             <CardTitle className="text-sm font-medium text-muted-foreground">
               Pass Rate
             </CardTitle>
-            <CheckCircle2 className="h-4 w-4 text-success" />
+            <CheckCircle2 className={`h-4 w-4 ${analytics.stats.passRate >= 80 ? "text-green-500" : "text-red-500"}`} />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats.passRate}%</div>
-            <p className="text-xs text-muted-foreground flex items-center gap-1 mt-1">
-              <TrendingUp className="h-3 w-3 text-success" />
-              <span className="text-success">+2.4%</span> from last period
+            <div className="text-2xl font-bold">{analytics.stats.passRate}%</div>
+            <p className="text-xs text-muted-foreground mt-1">
+              Overall pass rate
             </p>
           </CardContent>
         </Card>
@@ -206,15 +241,14 @@ export default function AnalyticsPage() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
-              Avg Duration
+              Environments
             </CardTitle>
             <Clock className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats.avgDuration}</div>
-            <p className="text-xs text-muted-foreground flex items-center gap-1 mt-1">
-              <TrendingDown className="h-3 w-3 text-success" />
-              <span className="text-success">-8%</span> faster than before
+            <div className="text-2xl font-bold">{analytics.stats.environments}</div>
+            <p className="text-xs text-muted-foreground mt-1">
+              Unique environments tested
             </p>
           </CardContent>
         </Card>
@@ -227,10 +261,9 @@ export default function AnalyticsPage() {
             <Zap className="h-4 w-4 text-primary" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats.testsExecuted.toLocaleString()}</div>
-            <p className="text-xs text-muted-foreground flex items-center gap-1 mt-1">
-              <TrendingUp className="h-3 w-3 text-success" />
-              <span className="text-success">+18%</span> from last period
+            <div className="text-2xl font-bold">{analytics.stats.testsExecuted.toLocaleString()}</div>
+            <p className="text-xs text-muted-foreground mt-1">
+              Individual test cases run
             </p>
           </CardContent>
         </Card>
@@ -240,93 +273,102 @@ export default function AnalyticsPage() {
       <div className="grid gap-6 lg:grid-cols-2">
         <Card>
           <CardHeader>
-            <CardTitle>Pass Rate Trend</CardTitle>
+            <CardTitle>Pass/Fail Trend</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="h-64">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={passRateData}>
-                  <XAxis
-                    dataKey="date"
-                    stroke="var(--color-muted-foreground)"
-                    fontSize={12}
-                    tickLine={false}
-                    axisLine={false}
-                  />
-                  <YAxis
-                    stroke="var(--color-muted-foreground)"
-                    fontSize={12}
-                    tickLine={false}
-                    axisLine={false}
-                    domain={[0, 100]}
-                  />
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: "var(--color-card)",
-                      border: "1px solid var(--color-border)",
-                      borderRadius: "8px",
-                    }}
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="passed"
-                    stroke="var(--color-success)"
-                    strokeWidth={2}
-                    dot={{ fill: "var(--color-success)", strokeWidth: 0 }}
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="failed"
-                    stroke="var(--color-destructive)"
-                    strokeWidth={2}
-                    dot={{ fill: "var(--color-destructive)", strokeWidth: 0 }}
-                  />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
+            {analytics.passRateData.length === 0 ? (
+              <p className="text-muted-foreground text-sm h-64 flex items-center justify-center">No test data available yet</p>
+            ) : (
+              <div className="h-64">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={analytics.passRateData}>
+                    <XAxis
+                      dataKey="date"
+                      stroke="var(--color-muted-foreground)"
+                      fontSize={12}
+                      tickLine={false}
+                      axisLine={false}
+                    />
+                    <YAxis
+                      stroke="var(--color-muted-foreground)"
+                      fontSize={12}
+                      tickLine={false}
+                      axisLine={false}
+                    />
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: "var(--color-card)",
+                        border: "1px solid var(--color-border)",
+                        borderRadius: "8px",
+                      }}
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="passed"
+                      stroke="#22c55e"
+                      strokeWidth={2}
+                      dot={{ fill: "#22c55e", strokeWidth: 0 }}
+                      name="Passed"
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="failed"
+                      stroke="#ef4444"
+                      strokeWidth={2}
+                      dot={{ fill: "#ef4444", strokeWidth: 0 }}
+                      name="Failed"
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            )}
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader>
-            <CardTitle>Execution Time by Suite</CardTitle>
+            <CardTitle>Tests by Environment</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="h-64">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={executionTimeData} layout="vertical">
-                  <XAxis
-                    type="number"
-                    stroke="var(--color-muted-foreground)"
-                    fontSize={12}
-                    tickLine={false}
-                    axisLine={false}
-                  />
-                  <YAxis
-                    dataKey="suite"
-                    type="category"
-                    stroke="var(--color-muted-foreground)"
-                    fontSize={12}
-                    tickLine={false}
-                    axisLine={false}
-                    width={50}
-                  />
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: "var(--color-card)",
-                      border: "1px solid var(--color-border)",
-                      borderRadius: "8px",
-                    }}
-                    formatter={(value) => [`${value}s`, "Duration"]}
-                  />
-                  <Bar
-                    dataKey="time"
-                    fill="var(--color-primary)"
-                    radius={[0, 4, 4, 0]}
-                  />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
+            {analytics.executionByEnv.length === 0 ? (
+              <p className="text-muted-foreground text-sm h-64 flex items-center justify-center">No test data available yet</p>
+            ) : (
+              <div className="h-64">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={analytics.executionByEnv} layout="vertical">
+                    <XAxis
+                      type="number"
+                      stroke="var(--color-muted-foreground)"
+                      fontSize={12}
+                      tickLine={false}
+                      axisLine={false}
+                    />
+                    <YAxis
+                      dataKey="env"
+                      type="category"
+                      stroke="var(--color-muted-foreground)"
+                      fontSize={12}
+                      tickLine={false}
+                      axisLine={false}
+                      width={60}
+                    />
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: "var(--color-card)",
+                        border: "1px solid var(--color-border)",
+                        borderRadius: "8px",
+                      }}
+                      formatter={(value) => [`${value}`, "Test Runs"]}
+                    />
+                    <Bar
+                      dataKey="count"
+                      fill="var(--color-primary)"
+                      radius={[0, 4, 4, 0]}
+                    />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
@@ -338,45 +380,51 @@ export default function AnalyticsPage() {
             <CardTitle>Test Distribution</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="h-48">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={testDistribution}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={50}
-                    outerRadius={70}
-                    paddingAngle={2}
-                    dataKey="value"
-                  >
-                    {testDistribution.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.color} />
-                    ))}
-                  </Pie>
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: "var(--color-card)",
-                      border: "1px solid var(--color-border)",
-                      borderRadius: "8px",
-                    }}
-                  />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
-            <div className="mt-4 flex justify-center gap-6">
-              {testDistribution.map((item) => (
-                <div key={item.name} className="flex items-center gap-2">
-                  <div
-                    className="h-3 w-3 rounded-full"
-                    style={{ backgroundColor: item.color }}
-                  />
-                  <span className="text-sm text-muted-foreground">
-                    {item.name}: {item.value}
-                  </span>
+            {analytics.testDistribution.length === 0 ? (
+              <p className="text-muted-foreground text-sm h-48 flex items-center justify-center">No test data available yet</p>
+            ) : (
+              <>
+                <div className="h-48">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={analytics.testDistribution}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={50}
+                        outerRadius={70}
+                        paddingAngle={2}
+                        dataKey="value"
+                      >
+                        {analytics.testDistribution.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={entry.color} />
+                        ))}
+                      </Pie>
+                      <Tooltip
+                        contentStyle={{
+                          backgroundColor: "var(--color-card)",
+                          border: "1px solid var(--color-border)",
+                          borderRadius: "8px",
+                        }}
+                      />
+                    </PieChart>
+                  </ResponsiveContainer>
                 </div>
-              ))}
-            </div>
+                <div className="mt-4 flex justify-center gap-6">
+                  {analytics.testDistribution.map((item) => (
+                    <div key={item.name} className="flex items-center gap-2">
+                      <div
+                        className="h-3 w-3 rounded-full"
+                        style={{ backgroundColor: item.color }}
+                      />
+                      <span className="text-sm text-muted-foreground">
+                        {item.name}: {item.value}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
           </CardContent>
         </Card>
 
@@ -385,43 +433,35 @@ export default function AnalyticsPage() {
             <CardTitle>Top Failing Tests</CardTitle>
           </CardHeader>
           <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Test</TableHead>
-                  <TableHead>Suite</TableHead>
-                  <TableHead>Failures</TableHead>
-                  <TableHead>Trend</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {topFailures.map((failure, index) => (
-                  <TableRow key={index}>
-                    <TableCell className="font-medium">{failure.test}</TableCell>
-                    <TableCell>
-                      <Badge variant="outline">{failure.suite}</Badge>
-                    </TableCell>
-                    <TableCell>
-                      <span className="flex items-center gap-2 text-destructive">
-                        <XCircle className="h-4 w-4" />
-                        {failure.failures}
-                      </span>
-                    </TableCell>
-                    <TableCell>
-                      {failure.trend === "up" && (
-                        <TrendingUp className="h-4 w-4 text-destructive" />
-                      )}
-                      {failure.trend === "down" && (
-                        <TrendingDown className="h-4 w-4 text-success" />
-                      )}
-                      {failure.trend === "stable" && (
-                        <AlertTriangle className="h-4 w-4 text-warning" />
-                      )}
-                    </TableCell>
+            {analytics.topFailures.length === 0 ? (
+              <p className="text-muted-foreground text-sm">No failed tests recorded</p>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Test</TableHead>
+                    <TableHead>Type</TableHead>
+                    <TableHead>Failures</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {analytics.topFailures.map((failure, index) => (
+                    <TableRow key={index}>
+                      <TableCell className="font-medium">{failure.test}</TableCell>
+                      <TableCell>
+                        <Badge variant="outline">{failure.type}</Badge>
+                      </TableCell>
+                      <TableCell>
+                        <span className="flex items-center gap-2 text-destructive">
+                          <XCircle className="h-4 w-4" />
+                          {failure.failures}
+                        </span>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
           </CardContent>
         </Card>
       </div>
@@ -432,60 +472,61 @@ export default function AnalyticsPage() {
           <CardTitle>Recent Test Runs</CardTitle>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Run ID</TableHead>
-                <TableHead>Suite</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Duration</TableHead>
-                <TableHead>Results</TableHead>
-                <TableHead>Time</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {recentRuns.map((run) => (
-                <TableRow key={run.id}>
-                  <TableCell className="font-mono text-sm">{run.id}</TableCell>
-                  <TableCell className="font-medium">{run.suite}</TableCell>
-                  <TableCell>
-                    <Badge
-                      variant="outline"
-                      className={
-                        run.status === "passed"
-                          ? "bg-success/10 text-success border-success/20"
-                          : "bg-destructive/10 text-destructive border-destructive/20"
-                      }
-                    >
-                      {run.status === "passed" ? (
-                        <CheckCircle2 className="mr-1 h-3 w-3" />
-                      ) : (
-                        <XCircle className="mr-1 h-3 w-3" />
-                      )}
-                      {run.status}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {run.duration}
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-3 text-sm">
-                      <span className="text-success">{run.tests.passed} passed</span>
-                      {run.tests.failed > 0 && (
-                        <span className="text-destructive">{run.tests.failed} failed</span>
-                      )}
-                      {run.tests.skipped > 0 && (
-                        <span className="text-muted-foreground">{run.tests.skipped} skipped</span>
-                      )}
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {run.timestamp}
-                  </TableCell>
+          {analytics.recentRuns.length === 0 ? (
+            <p className="text-muted-foreground text-sm">No test runs recorded. Go to Test Runner to execute tests.</p>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Run ID</TableHead>
+                  <TableHead>Type</TableHead>
+                  <TableHead>Environment</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Results</TableHead>
+                  <TableHead>Time</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {analytics.recentRuns.map((run) => (
+                  <TableRow key={run.id}>
+                    <TableCell className="font-mono text-sm">{run.id}</TableCell>
+                    <TableCell>
+                      <Badge variant="outline">{run.type}</Badge>
+                    </TableCell>
+                    <TableCell className="font-medium">{run.environment}</TableCell>
+                    <TableCell>
+                      <Badge
+                        variant="outline"
+                        className={
+                          run.status === "passed"
+                            ? "bg-green-500/10 text-green-600 border-green-500/20"
+                            : "bg-red-500/10 text-red-600 border-red-500/20"
+                        }
+                      >
+                        {run.status === "passed" ? (
+                          <CheckCircle2 className="mr-1 h-3 w-3" />
+                        ) : (
+                          <XCircle className="mr-1 h-3 w-3" />
+                        )}
+                        {run.status}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-3 text-sm">
+                        <span className="text-green-600">{run.tests.passed} passed</span>
+                        {run.tests.failed > 0 && (
+                          <span className="text-red-600">{run.tests.failed} failed</span>
+                        )}
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {run.timestamp}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
         </CardContent>
       </Card>
     </div>
