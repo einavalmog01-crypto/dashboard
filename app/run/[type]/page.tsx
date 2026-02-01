@@ -1,10 +1,12 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { useParams } from "next/navigation"
+import { useParams, useSearchParams } from "next/navigation"
 
 export default function SanityRun() {
   const { type } = useParams<{ type: string }>()
+  const searchParams = useSearchParams()
+  const selectedEnv = searchParams.get("env") || "SST"
   const sanityType = type === "full-sanity" ? "FULL" : "BASIC"
 
   const [logs, setLogs] = useState<string[]>([])
@@ -17,7 +19,8 @@ export default function SanityRun() {
     const ws = new WebSocket(`ws://${host}:${wsPort}`)
 
     ws.onopen = () => {
-      ws.send(JSON.stringify({ type: sanityType }))
+      // Send both sanity type and environment to the WebSocket server
+      ws.send(JSON.stringify({ type: sanityType, env: selectedEnv }))
     }
 
     ws.onmessage = (e) => {
@@ -31,16 +34,16 @@ export default function SanityRun() {
     }
 
     ws.onerror = () => {
-      setLogs(l => [...l, "❌ WebSocket connection error\n"])
+      setLogs(l => [...l, "WebSocket connection error\n"])
     }
 
     return () => ws.close()
-  }, [sanityType])
+  }, [sanityType, selectedEnv])
 
   return (
     <div style={{ padding: 20 }}>
       <h2>
-        Running {sanityType === "FULL" ? "Full Sanity" : "Basic Sanity"}
+        Running {sanityType === "FULL" ? "Full Sanity" : "Basic Sanity"} on {selectedEnv}
       </h2>
 
       <pre

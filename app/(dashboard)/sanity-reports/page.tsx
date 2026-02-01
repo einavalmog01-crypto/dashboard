@@ -61,9 +61,11 @@ export default function SanityReportsPage() {
 
       <div className="space-y-3">
         {reports.map((report) => {
-          const label = `${
-            report.type === "FULL" ? "Full Sanity" : "Basic Sanity"
-          } — ${new Date(report.createdAt).toLocaleString()}`
+          const typeLabel = report.type === "FULL" ? "Full Sanity" : 
+                           report.type === "BASIC" ? "Basic Sanity" :
+                           report.type === "SELECTED" ? "Selected Tests" : "Scheduled Sanity"
+          const envLabel = report.environment || "Unknown"
+          const label = `${typeLabel} on ${envLabel} — ${new Date(report.createdAt).toLocaleString()}`
 
           const passed = report.tests.filter((t: any) => t.status === "PASS").length
           const failed = report.tests.filter((t: any) => t.status === "FAILED").length
@@ -80,6 +82,7 @@ export default function SanityReportsPage() {
                 <div>
                   <CardTitle className="text-base">{label}</CardTitle>
                   <div className="flex gap-2 mt-1">
+                    <Badge variant="outline">{envLabel}</Badge>
                     <Badge className="bg-green-600 text-black">PASS {passed}</Badge>
                     <Badge className="bg-red-600 text-white">FAILED {failed}</Badge>
                   </div>

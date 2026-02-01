@@ -5,22 +5,21 @@ import { Bell, Search, ChevronDown } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { LogViewer } from "./log-viewer" // optional: keep only if modal needed
-import type { EnvironmentConfig, Environment } from "@/lib/environment-config"
+import { LogViewer } from "./log-viewer"
+import type { Environment } from "@/lib/environment-config"
 import { useEnvironment } from "@/lib/environment-context"
 
 interface HeaderProps {
   title: string
   description?: string
-  environmentConfig?: EnvironmentConfig // optional config for LogViewer
 }
 
-const ENVS = ["SST", "CRs", "DEV3ST", "SEV4ST", "DEV5ST", "DEV360"]
+const ENVS: Environment[] = ["SST", "CRs", "DEV3ST", "DEV4ST", "DEV5ST", "DEV360"]
 
-export function Header({ title, description, environmentConfig }: HeaderProps) {
-  const { selectedEnv, setSelectedEnv } = useEnvironment()
+export function Header({ title, description }: HeaderProps) {
+  const { selectedEnv, setSelectedEnv, currentEnvironmentConfig } = useEnvironment()
   const [dropdownOpen, setDropdownOpen] = useState(false)
-  const [isLogViewerOpen, setIsLogViewerOpen] = useState(false) // optional
+  const [isLogViewerOpen, setIsLogViewerOpen] = useState(false)
 
   return (
     <>
@@ -89,13 +88,13 @@ export function Header({ title, description, environmentConfig }: HeaderProps) {
         </div>
       </header>
 
-      {/* Optional LogViewer modal */}
+      {/* LogViewer modal - uses currentEnvironmentConfig from context */}
       {isLogViewerOpen && (
         <LogViewer
           isOpen={isLogViewerOpen}
           onClose={() => setIsLogViewerOpen(false)}
-          environment={selectedEnv as Environment}
-          environmentConfig={environmentConfig}
+          environment={selectedEnv}
+          environmentConfig={currentEnvironmentConfig}
         />
       )}
     </>

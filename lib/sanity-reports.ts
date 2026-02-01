@@ -1,14 +1,16 @@
-export type SanityType = "FULL" | "BASIC"
+export type SanityType = "FULL" | "BASIC" | "SELECTED" | "SCHEDULED"
 
 export type SanityTestResult = {
   testName: string
   status: "PASS" | "FAILED"
   error?: string
+  comment?: string
 }
 
 export type SanityReport = {
   id: string
   type: SanityType
+  environment: string  // The environment the sanity was run against
   createdAt: string
   tests: SanityTestResult[]
 }

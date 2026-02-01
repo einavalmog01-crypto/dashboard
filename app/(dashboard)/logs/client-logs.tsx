@@ -3,48 +3,23 @@
 import { useEffect, useState } from "react"
 import { useSearchParams } from "next/navigation"
 import { LogViewer } from "@/components/dashboard/log-viewer"
-import type { EnvironmentConfig, Environment } from "@/lib/environment-config"
-import { defaultEnvironments } from "@/lib/environment-config"
+import type { Environment } from "@/lib/environment-config"
+import { useEnvironment } from "@/lib/environment-context"
 
 export default function ClientLogs() {
   const searchParams = useSearchParams()
+  const { environments, setSelectedEnv } = useEnvironment()
   const envFromQuery = (searchParams.get("env") || "SST") as Environment
   const [environment, setEnvironment] = useState<Environment>(envFromQuery)
 
   useEffect(() => {
     setEnvironment(envFromQuery)
-  }, [envFromQuery])
+    // Also update the global context so it stays in sync
+    setSelectedEnv(envFromQuery)
+  }, [envFromQuery, setSelectedEnv])
 
-  // Find the matching environment config or use a fallback
-  const environmentConfig: EnvironmentConfig = defaultEnvironments.find(
-    (e) => e.name === environment
-  ) ?? {
-    name: environment,
-    color: "bg-green-500",
-    isConfigured: false,
-    db: {
-      hostname: "",
-      port: "1521",
-      connectionType: "sid",
-      sid: "",
-      serviceName: "",
-      username: "",
-      password: "",
-    },
-    auth: {
-      username: "",
-      password: "",
-    },
-    endpoint: {
-      host: "",
-    },
-    unix: {
-      hostName: "localhost",
-      port: "22",
-      userName: "user",
-      password: "",
-    },
-  }
+  // Find the matching environment config from stored configs (with credentials)
+  const environmentConfig = environments.find((e) => e.name === environment)
 
   return (
     <div className="h-screen w-screen overflow-hidden bg-background">
@@ -52,6 +27,12 @@ export default function ClientLogs() {
         <h1 className="text-xl font-semibold">Backend Logs</h1>
         <p className="text-sm text-muted-foreground">
           Environment: {environment}
+          {environmentConfig?.isConfigured && (
+            <span className="ml-2 text-green-500">(Configured)</span>
+          )}
+          {!environmentConfig?.isConfigured && (
+            <span className="ml-2 text-amber-500">(Not configured - go to Settings)</span>
+          )}
         </p>
       </div>
 

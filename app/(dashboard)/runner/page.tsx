@@ -24,11 +24,13 @@ const initialTests: TestCase[] = [
 
 function saveSanityReport(
   type: "FULL" | "BASIC" | "SELECTED" | "SCHEDULED",
+  environment: string,
   tests: { name: string; status: "PASS" | "FAILED"; error: string; comment?: string }[]
 ) {
   const report = {
     id: crypto.randomUUID(),
     type,
+    environment,
     createdAt: new Date().toISOString(),
     tests,
   }
@@ -90,7 +92,7 @@ async function runSelected() {
 
 
   function scheduleSanity() {
-    const entry = `${scheduleType.toUpperCase()} Sanity — ${scheduleDate} ${scheduleTime} (${recurrence})`
+    const entry = `${scheduleType.toUpperCase()} Sanity on ${selectedEnv} — ${scheduleDate} ${scheduleTime} (${recurrence})`
     setScheduledSanities(prev => [entry, ...prev])
     setIsScheduleModalOpen(false)
   }
@@ -108,7 +110,7 @@ async function runSelected() {
       comment: "",
     }))
 
-    saveSanityReport("SCHEDULED", testsForReport)
+    saveSanityReport("SCHEDULED", selectedEnv, testsForReport)
   }
 
   function handleCommentChange(testId: string, value: string) {
@@ -193,11 +195,11 @@ async function runSelected() {
               <CardTitle>Quick Actions</CardTitle>
             </CardHeader>
             <CardContent className="flex flex-col gap-2">
-              <Button onClick={() => window.open("/run/full-sanity", "_blank")}>
-                Run Full Sanity
+              <Button onClick={() => window.open(`/run/full-sanity?env=${selectedEnv}`, "_blank")}>
+                Run Full Sanity ({selectedEnv})
               </Button>
-              <Button onClick={() => window.open("/run/basic-sanity", "_blank")}>
-                Run Basic Sanity
+              <Button onClick={() => window.open(`/run/basic-sanity?env=${selectedEnv}`, "_blank")}>
+                Run Basic Sanity ({selectedEnv})
               </Button>
               <Button onClick={() => window.open(`/logs?env=${selectedEnv}`, "_blank")}>
                 View Logs ({selectedEnv})
@@ -227,6 +229,9 @@ async function runSelected() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
           <div className="bg-white rounded-lg p-6 w-96 text-black">
             <h4 className="text-lg font-semibold mb-4">Schedule Sanity</h4>
+            <p className="text-sm text-gray-600 mb-4">
+              Environment: <span className="font-semibold">{selectedEnv}</span>
+            </p>
 
             <div className="space-y-2">
               <label className="flex flex-col">

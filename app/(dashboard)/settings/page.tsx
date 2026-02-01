@@ -3,11 +3,11 @@
 import { useRouter } from "next/navigation"
 import { useState } from "react"
 import { EnvironmentSettings } from "@/components/environment-settings"
-import { defaultEnvironments } from "@/lib/environment-config"
+import { useEnvironment } from "@/lib/environment-context"
 
 export default function SettingsPage() {
   const router = useRouter()
-  const [configs, setConfigs] = useState(defaultEnvironments)
+  const { environments, setEnvironments } = useEnvironment()
   const [open, setOpen] = useState(true)
 
   return (
@@ -17,11 +17,10 @@ export default function SettingsPage() {
       <EnvironmentSettings
         isOpen={open}
         onClose={() => setOpen(false)}
-        environments={configs}
+        environments={environments}
         onSave={(updated) => {
-          setConfigs(updated)
-          localStorage.setItem("env-configs", JSON.stringify(updated))
-          router.push("/") // ✅ go back to main page
+          setEnvironments(updated)
+          router.push("/") // go back to main page
         }}
       />
     </div>

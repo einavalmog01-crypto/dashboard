@@ -1,25 +1,7 @@
 import type { EnvironmentConfig } from "@/lib/environment-config"
+import { defaultEnvironments } from "@/lib/environment-config"
 
-// Base environments — update host/db as needed
-export const defaultEnvironments: EnvironmentConfig[] = [
-  {
-    name: "dev",
-    endpoint: { host: "http://localhost:3000" },
-    db: {
-      hostname: "localhost",
-      port: 1521,
-      username: "user",
-      password: "pass",
-      connectionType: "sid",
-      sid: "XE",
-    },
-    auth: { username: "admin", password: "admin" },
-    unix: { hostName: "localhost", port: 22, userName: "user", password: "pass" },
-  },
-  // Add other default environments here
-]
-
-const STORAGE_KEY = "environments"
+const STORAGE_KEY = "env-configs"
 
 /**
  * Load environments safely
