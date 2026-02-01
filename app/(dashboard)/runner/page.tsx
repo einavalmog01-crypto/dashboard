@@ -12,12 +12,22 @@ interface TestCase {
   id: string
   name: string
   suite: string
+  description?: string
   status: "idle" | "running" | "passed" | "failed"
   selected: boolean
   comment?: string
 }
 
 const initialTests: TestCase[] = [
+  { 
+    id: "cable-submit-order", 
+    name: "Cable Submit Order", 
+    suite: "Cable", 
+    description: "SubmitOrder (GenerateContract + Fulfillment) + SetOrderStatus flow",
+    status: "idle", 
+    selected: false, 
+    comment: "" 
+  },
   { id: "1", name: "User Login", suite: "Auth", status: "idle", selected: true, comment: "" },
   { id: "2", name: "Checkout Flow", suite: "E-Commerce", status: "idle", selected: true, comment: "" },
 ]
@@ -42,7 +52,7 @@ function saveSanityReport(
 }
 
 export default function TestRunnerPage() {
-  const { selectedEnv } = useEnvironment()
+  const { selectedEnv, currentEnvironmentConfig } = useEnvironment()
   const [tests, setTests] = useState(initialTests)
   const [isRunning, setIsRunning] = useState(false)
 
@@ -58,35 +68,71 @@ export default function TestRunnerPage() {
   const failed = tests.filter(t => t.status === "failed").length
 
 async function runSelected() {
-  setIsRunning(true)
-
-  await fetch("/api/run/full", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-env": selectedEnv,
-    },
-    body: JSON.stringify({
-      tests: selectedTests.map(t => ({
-        id: t.id,
-        name: t.name,
-      })),
-    }),
-  })
-
-  // existing mock execution logic (can stay for now)
-  for (const test of selectedTests) {
-    setTests(t => t.map(x => x.id === test.id ? { ...x, status: "running" } : x))
-    await new Promise(r => setTimeout(r, 800))
-    setTests(t =>
-      t.map(x =>
-        x.id === test.id
-          ? { ...x, status: Math.random() > 0.2 ? "passed" : "failed" }
-          : x
-      )
-    )
+  if (!currentEnvironmentConfig?.isConfigured) {
+    alert(`Environment ${selectedEnv} is not configured. Please go to Settings and configure the credentials.`)
+    return
   }
 
+  setIsRunning(true)
+  const results: { name: string; status: "PASS" | "FAILED"; error: string; comment?: string }[] = []
+
+  for (const test of selectedTests) {
+    setTests(t => t.map(x => x.id === test.id ? { ...x, status: "running" } : x))
+
+    try {
+      // Call the API with environment config
+      const response = await fetch("/api/run/test", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          testId: test.id,
+          testName: test.name,
+          environment: selectedEnv,
+          config: {
+            auth: currentEnvironmentConfig.auth,
+            db: currentEnvironmentConfig.db,
+            endpoint: currentEnvironmentConfig.endpoint,
+            unix: currentEnvironmentConfig.unix,
+          },
+        }),
+      })
+
+      const data = await response.json()
+      const passed = data.success
+
+      setTests(t =>
+        t.map(x =>
+          x.id === test.id
+            ? { ...x, status: passed ? "passed" : "failed" }
+            : x
+        )
+      )
+
+      results.push({
+        name: test.name,
+        status: passed ? "PASS" : "FAILED",
+        error: data.error || "",
+        comment: test.comment,
+      })
+    } catch (error) {
+      setTests(t =>
+        t.map(x =>
+          x.id === test.id ? { ...x, status: "failed" } : x
+        )
+      )
+      results.push({
+        name: test.name,
+        status: "FAILED",
+        error: error instanceof Error ? error.message : "Unknown error",
+        comment: test.comment,
+      })
+    }
+  }
+
+  // Save report
+  saveSanityReport("SELECTED", selectedEnv, results)
   setIsRunning(false)
 }
 
@@ -125,16 +171,24 @@ async function runSelected() {
         {/* Test Queue */}
         <div className="lg:col-span-2">
           <Card>
-            <CardHeader>
+            <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle>Test Queue</CardTitle>
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-muted-foreground">Environment:</span>
+                <Badge variant={currentEnvironmentConfig?.isConfigured ? "default" : "destructive"}>
+                  {selectedEnv}
+                  {!currentEnvironmentConfig?.isConfigured && " (Not configured)"}
+                </Badge>
+              </div>
             </CardHeader>
             <CardContent className="space-y-2">
               {tests.map(t => (
-                <div key={t.id} className="flex flex-col border p-3 rounded space-y-1">
-                  <div className="flex justify-between items-center">
-                    <div className="flex gap-2 items-center">
+                <div key={t.id} className="flex flex-col border p-3 rounded space-y-2">
+                  <div className="flex justify-between items-start">
+                    <div className="flex gap-2 items-start">
                       <Checkbox
                         checked={t.selected}
+                        className="mt-1"
                         onCheckedChange={() =>
                           setTests(s =>
                             s.map(x => x.id === t.id ? { ...x, selected: !x.selected } : x)
@@ -144,6 +198,9 @@ async function runSelected() {
                       <div>
                         <div className="text-sm font-medium">{t.name}</div>
                         <div className="text-xs text-muted-foreground">{t.suite}</div>
+                        {t.description && (
+                          <div className="text-xs text-muted-foreground mt-1">{t.description}</div>
+                        )}
                       </div>
                     </div>
                     <StatusIcon status={t.status} />
