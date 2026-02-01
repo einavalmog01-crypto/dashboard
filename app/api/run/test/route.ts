@@ -193,7 +193,37 @@ async function runCableSubmitOrder(
       response: fulfillmentText
     })
 
-    // STEP 3: SetOrderStatus
+    // STEP 3: Wait for DB status = C after Fulfillment
+    console.log(`[Cable${channel}SubmitOrder] Step 3: Waiting for DB status C (after Fulfillment)`)
+    
+    const dbCheckAfterFulfillment = await waitForSOSCompletion(
+      db,
+      ogwOrderId,
+      "After Fulfillment",
+      50,  // maxRetries
+      5000 // sleepInterval (5 seconds)
+    )
+
+    if (!dbCheckAfterFulfillment.success) {
+      steps.push({
+        name: "DB Check (after Fulfillment)",
+        status: "FAILED",
+        message: dbCheckAfterFulfillment.message,
+        request: `Query: SELECT MESSAGE_STATUS FROM set_order_status_req_handler WHERE CDM_TXID = '${ogwOrderId}'`,
+        response: `Failed after ${dbCheckAfterFulfillment.attempts} attempts`
+      })
+      throw new Error(dbCheckAfterFulfillment.message)
+    }
+
+    steps.push({
+      name: "DB Check (after Fulfillment)",
+      status: "PASS",
+      message: `${dbCheckAfterFulfillment.message} (${dbCheckAfterFulfillment.attempts} attempts)`,
+      request: `Query: SELECT MESSAGE_STATUS FROM set_order_status_req_handler WHERE CDM_TXID = '${ogwOrderId}'`,
+      response: `Order Line IDs: ${dbCheckAfterFulfillment.orderLineIds?.join(", ") || "N/A"}`
+    })
+
+    // STEP 4: SetOrderStatus
     console.log(`[Cable${channel}SubmitOrder] Step 3: SetOrderStatus`)
     
     // Use custom template if provided, otherwise use default
@@ -242,6 +272,36 @@ async function runCableSubmitOrder(
       response: setOrderStatusText
     })
 
+    // STEP 6: Wait for DB status = C after SetOrderStatus
+    console.log(`[Cable${channel}SubmitOrder] Step 6: Waiting for DB status C (after SetOrderStatus)`)
+    
+    const dbCheckAfterSetStatus = await waitForSOSCompletion(
+      db,
+      ogwOrderId,
+      "After SetOrderStatus",
+      50,  // maxRetries
+      5000 // sleepInterval (5 seconds)
+    )
+
+    if (!dbCheckAfterSetStatus.success) {
+      steps.push({
+        name: "DB Check (after SetOrderStatus)",
+        status: "FAILED",
+        message: dbCheckAfterSetStatus.message,
+        request: `Query: SELECT MESSAGE_STATUS FROM set_order_status_req_handler WHERE CDM_TXID = '${ogwOrderId}'`,
+        response: `Failed after ${dbCheckAfterSetStatus.attempts} attempts`
+      })
+      throw new Error(dbCheckAfterSetStatus.message)
+    }
+
+    steps.push({
+      name: "DB Check (after SetOrderStatus)",
+      status: "PASS",
+      message: `${dbCheckAfterSetStatus.message} (${dbCheckAfterSetStatus.attempts} attempts)`,
+      request: `Query: SELECT MESSAGE_STATUS FROM set_order_status_req_handler WHERE CDM_TXID = '${ogwOrderId}'`,
+      response: `Order Line IDs: ${dbCheckAfterSetStatus.orderLineIds?.join(", ") || "N/A"}`
+    })
+
     console.log(`[Cable${channel}SubmitOrder] All steps completed successfully for OGWOrderID: ${ogwOrderId}`)
 
     return NextResponse.json({
@@ -261,6 +321,121 @@ async function runCableSubmitOrder(
       steps,
       error: error instanceof Error ? error.message : "Unknown error",
     })
+  }
+}
+
+/**
+ * Wait for all order lines to have MESSAGE_STATUS = 'C' in the database
+ * Polls the set_order_status_req_handler table up to maxRetries times
+ */
+async function waitForSOSCompletion(
+  db: TestRunRequest["config"]["db"],
+  ogwOrderId: string,
+  stepName: string,
+  maxRetries: number = 50,
+  sleepInterval: number = 5000
+): Promise<{ success: boolean; message: string; attempts: number; orderLineIds?: string[] }> {
+  console.log(`[DB Check] ${stepName}: Checking order status for OGWOrderID: ${ogwOrderId}`)
+  
+  // Build Oracle connection string
+  const connectionString = db.connectionType === "sid" 
+    ? `${db.hostname}:${db.port}/${db.sid}`
+    : `${db.hostname}:${db.port}/${db.serviceName}`
+
+  const query = `
+    SELECT 
+      M.MESSAGE_STATUS,
+      EXTRACTVALUE(XMLTYPE(M.MESSAGE_DATA), '//*[local-name()="OGWOrderLineId"]') AS ORDER_LINE_ID
+    FROM set_order_status_req_handler M
+    WHERE TRIM(M.CDM_TXID) = TRIM('${ogwOrderId}')
+    ORDER BY TO_NUMBER(M.SUBSCRIBE_MESSAGE_ID)
+  `
+
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    console.log(`[DB Check] Attempt ${attempt}/${maxRetries}`)
+    
+    try {
+      // Call the database check API endpoint
+      const response = await fetch(`${process.env.NEXT_PUBLIC_APP_URL || ''}/api/db/query`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          db: {
+            hostname: db.hostname,
+            port: db.port,
+            connectionType: db.connectionType,
+            sid: db.sid,
+            serviceName: db.serviceName,
+            username: db.username,
+            password: db.password,
+          },
+          query,
+        }),
+      })
+
+      if (!response.ok) {
+        console.log(`[DB Check] Query failed, retrying...`)
+        await new Promise(r => setTimeout(r, sleepInterval))
+        continue
+      }
+
+      const result = await response.json()
+      const rows = result.rows || []
+
+      if (rows.length === 0) {
+        console.log(`[DB Check] No rows found yet, waiting...`)
+        await new Promise(r => setTimeout(r, sleepInterval))
+        continue
+      }
+
+      // Check if all rows have MESSAGE_STATUS = 'C'
+      let allCompleted = true
+      const orderLineIds: string[] = []
+      
+      for (const row of rows) {
+        const status = row.MESSAGE_STATUS || row[0]
+        const lineId = row.ORDER_LINE_ID || row[1]
+        
+        if (lineId && /^\d+$/.test(lineId)) {
+          orderLineIds.push(lineId)
+        }
+        
+        if (status === "F") {
+          return {
+            success: false,
+            message: `SetOrderStatus failed for OrderLineID ${lineId}`,
+            attempts: attempt,
+          }
+        }
+        
+        if (status !== "C") {
+          allCompleted = false
+        }
+      }
+
+      if (allCompleted && orderLineIds.length > 0) {
+        console.log(`[DB Check] All order lines completed with status C`)
+        return {
+          success: true,
+          message: `All ${orderLineIds.length} order lines completed successfully`,
+          attempts: attempt,
+          orderLineIds,
+        }
+      }
+
+      console.log(`[DB Check] Not all order lines completed yet (${rows.filter((r: any) => (r.MESSAGE_STATUS || r[0]) === 'C').length}/${rows.length} completed)`)
+      await new Promise(r => setTimeout(r, sleepInterval))
+      
+    } catch (error) {
+      console.log(`[DB Check] Error querying database:`, error)
+      await new Promise(r => setTimeout(r, sleepInterval))
+    }
+  }
+
+  return {
+    success: false,
+    message: `Timeout: Not all order lines reached status C after ${maxRetries} attempts`,
+    attempts: maxRetries,
   }
 }
 
