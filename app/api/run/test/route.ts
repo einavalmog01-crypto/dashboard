@@ -69,16 +69,17 @@ async function runCableSubmitOrder(
   const orderId = Math.floor(100000000 + Math.random() * 900000000).toString()
   console.log(`[Cable${channel}SubmitOrder] Generated OrderID: ${orderId}`)
 
-  const steps: { name: string; status: "PASS" | "FAILED"; message: string }[] = []
+  const steps: { name: string; status: "PASS" | "FAILED"; message: string; request?: string; response?: string }[] = []
 
   try {
     // STEP 1: SubmitOrder (GenerateContract)
     console.log(`[Cable${channel}SubmitOrder] Step 1: SubmitOrder (GenerateContract)`)
     
     const submitOrderXml = buildSubmitOrderXml(orderId, "GenerateContract")
+    const generateContractUrl = `${endpoint.host}/VFDESubmitOrderEG/VFDE`
     
     const generateContractResponse = await fetch(
-      `${endpoint.host}/VFDESubmitOrderEG/VFDE`,
+      generateContractUrl,
       {
         method: "POST",
         headers: {
@@ -95,26 +96,47 @@ async function runCableSubmitOrder(
     // Check for SOAP fault
     if (generateContractText.includes("<faultstring>")) {
       const faultMatch = generateContractText.match(/<faultstring>(.*?)<\/faultstring>/)
+      steps.push({ 
+        name: "SubmitOrder (GenerateContract)", 
+        status: "FAILED", 
+        message: `SOAP Fault: ${faultMatch?.[1] || "Unknown"}`,
+        request: `POST ${generateContractUrl}\n\n${submitOrderXml}`,
+        response: generateContractText
+      })
       throw new Error(`GenerateContract SOAP Fault: ${faultMatch?.[1] || "Unknown"}`)
     }
 
     // Extract OGWOrderID
     const ogwOrderIdMatch = generateContractText.match(/<OGWOrderID>(.*?)<\/OGWOrderID>/)
     if (!ogwOrderIdMatch) {
+      steps.push({ 
+        name: "SubmitOrder (GenerateContract)", 
+        status: "FAILED", 
+        message: "OGWOrderID not found in response",
+        request: `POST ${generateContractUrl}\n\n${submitOrderXml}`,
+        response: generateContractText
+      })
       throw new Error("OGWOrderID not found in GenerateContract response")
     }
     const ogwOrderId = ogwOrderIdMatch[1]
     console.log(`[Cable${channel}SubmitOrder] Extracted OGWOrderID: ${ogwOrderId}`)
 
-    steps.push({ name: "SubmitOrder (GenerateContract)", status: "PASS", message: `OGWOrderID: ${ogwOrderId}` })
+    steps.push({ 
+      name: "SubmitOrder (GenerateContract)", 
+      status: "PASS", 
+      message: `OGWOrderID: ${ogwOrderId}`,
+      request: `POST ${generateContractUrl}\n\n${submitOrderXml}`,
+      response: generateContractText
+    })
 
     // STEP 2: SubmitOrder (Fulfillment)
     console.log(`[Cable${channel}SubmitOrder] Step 2: SubmitOrder (Fulfillment)`)
     
     const fulfillmentXml = buildSubmitOrderXml(orderId, "Fulfillment", ogwOrderId)
+    const fulfillmentUrl = `${endpoint.host}/VFDESubmitOrderEG/VFDE`
     
     const fulfillmentResponse = await fetch(
-      `${endpoint.host}/VFDESubmitOrderEG/VFDE`,
+      fulfillmentUrl,
       {
         method: "POST",
         headers: {
@@ -130,18 +152,32 @@ async function runCableSubmitOrder(
     
     if (fulfillmentText.includes("<faultstring>")) {
       const faultMatch = fulfillmentText.match(/<faultstring>(.*?)<\/faultstring>/)
+      steps.push({ 
+        name: "SubmitOrder (Fulfillment)", 
+        status: "FAILED", 
+        message: `SOAP Fault: ${faultMatch?.[1] || "Unknown"}`,
+        request: `POST ${fulfillmentUrl}\n\n${fulfillmentXml}`,
+        response: fulfillmentText
+      })
       throw new Error(`Fulfillment SOAP Fault: ${faultMatch?.[1] || "Unknown"}`)
     }
 
-    steps.push({ name: "SubmitOrder (Fulfillment)", status: "PASS", message: "Fulfillment submitted" })
+    steps.push({ 
+      name: "SubmitOrder (Fulfillment)", 
+      status: "PASS", 
+      message: "Fulfillment submitted",
+      request: `POST ${fulfillmentUrl}\n\n${fulfillmentXml}`,
+      response: fulfillmentText
+    })
 
     // STEP 3: SetOrderStatus
     console.log(`[Cable${channel}SubmitOrder] Step 3: SetOrderStatus`)
     
     const setOrderStatusXml = buildSetOrderStatusXml(ogwOrderId)
+    const setOrderStatusUrl = `${endpoint.host}/VFDESetOrderStatusEG/VFDE`
     
     const setOrderStatusResponse = await fetch(
-      `${endpoint.host}/VFDESetOrderStatusEG/VFDE`,
+      setOrderStatusUrl,
       {
         method: "POST",
         headers: {
@@ -157,10 +193,23 @@ async function runCableSubmitOrder(
     
     if (setOrderStatusText.includes("<faultstring>")) {
       const faultMatch = setOrderStatusText.match(/<faultstring>(.*?)<\/faultstring>/)
+      steps.push({ 
+        name: "SetOrderStatus", 
+        status: "FAILED", 
+        message: `SOAP Fault: ${faultMatch?.[1] || "Unknown"}`,
+        request: `POST ${setOrderStatusUrl}\n\n${setOrderStatusXml}`,
+        response: setOrderStatusText
+      })
       throw new Error(`SetOrderStatus SOAP Fault: ${faultMatch?.[1] || "Unknown"}`)
     }
 
-    steps.push({ name: "SetOrderStatus", status: "PASS", message: "Order status set successfully" })
+    steps.push({ 
+      name: "SetOrderStatus", 
+      status: "PASS", 
+      message: "Order status set successfully",
+      request: `POST ${setOrderStatusUrl}\n\n${setOrderStatusXml}`,
+      response: setOrderStatusText
+    })
 
     console.log(`[Cable${channel}SubmitOrder] All steps completed successfully for OGWOrderID: ${ogwOrderId}`)
 

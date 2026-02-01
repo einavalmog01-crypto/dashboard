@@ -18,6 +18,24 @@ interface TestCase {
   comment?: string
 }
 
+interface StepResult {
+  name: string
+  status: "PASS" | "FAILED"
+  message: string
+  request?: string
+  response?: string
+}
+
+interface TestResult {
+  testId: string
+  testName: string
+  environment: string
+  success: boolean
+  steps: StepResult[]
+  error?: string
+  timestamp: string
+}
+
 const initialTests: TestCase[] = [
   { 
     id: "cable-retail-submit-order", 
@@ -64,6 +82,9 @@ export default function TestRunnerPage() {
   const { selectedEnv, currentEnvironmentConfig } = useEnvironment()
   const [tests, setTests] = useState(initialTests)
   const [isRunning, setIsRunning] = useState(false)
+  const [testResults, setTestResults] = useState<TestResult[]>([])
+  const [expandedResult, setExpandedResult] = useState<string | null>(null)
+  const [expandedStep, setExpandedStep] = useState<string | null>(null)
 
   const [scheduledSanities, setScheduledSanities] = useState<string[]>([])
   const [isScheduleModalOpen, setIsScheduleModalOpen] = useState(false)
@@ -83,6 +104,7 @@ async function runSelected() {
   }
 
   setIsRunning(true)
+  setTestResults([]) // Clear previous results
   const results: { name: string; status: "PASS" | "FAILED"; error: string; comment?: string }[] = []
 
   for (const test of selectedTests) {
@@ -119,6 +141,17 @@ async function runSelected() {
         )
       )
 
+      // Add to test results with full step details
+      setTestResults(prev => [...prev, {
+        testId: test.id,
+        testName: test.name,
+        environment: selectedEnv,
+        success: passed,
+        steps: data.steps || [],
+        error: data.error,
+        timestamp: new Date().toISOString(),
+      }])
+
       results.push({
         name: test.name,
         status: passed ? "PASS" : "FAILED",
@@ -131,6 +164,17 @@ async function runSelected() {
           x.id === test.id ? { ...x, status: "failed" } : x
         )
       )
+
+      setTestResults(prev => [...prev, {
+        testId: test.id,
+        testName: test.name,
+        environment: selectedEnv,
+        success: false,
+        steps: [],
+        error: error instanceof Error ? error.message : "Unknown error",
+        timestamp: new Date().toISOString(),
+      }])
+
       results.push({
         name: test.name,
         status: "FAILED",
@@ -289,6 +333,104 @@ async function runSelected() {
           </Card>
         </div>
       </div>
+
+      {/* Test Results Panel */}
+      {testResults.length > 0 && (
+        <Card className="mt-6">
+          <CardHeader>
+            <CardTitle>Test Execution Results</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {testResults.map((result) => (
+              <div key={result.testId + result.timestamp} className="border rounded-lg overflow-hidden">
+                <button
+                  onClick={() => setExpandedResult(expandedResult === result.testId ? null : result.testId)}
+                  className="w-full flex items-center justify-between p-4 hover:bg-muted text-left"
+                >
+                  <div className="flex items-center gap-3">
+                    {result.success ? (
+                      <CheckCircle className="h-5 w-5 text-green-500" />
+                    ) : (
+                      <XCircle className="h-5 w-5 text-red-500" />
+                    )}
+                    <div>
+                      <div className="font-medium">{result.testName}</div>
+                      <div className="text-sm text-muted-foreground">
+                        {result.environment} - {new Date(result.timestamp).toLocaleTimeString()}
+                      </div>
+                    </div>
+                  </div>
+                  <Badge variant={result.success ? "default" : "destructive"}>
+                    {result.success ? "PASSED" : "FAILED"}
+                  </Badge>
+                </button>
+
+                {expandedResult === result.testId && (
+                  <div className="border-t p-4 bg-muted/50 space-y-3">
+                    {result.error && (
+                      <div className="p-3 bg-red-100 text-red-800 rounded text-sm">
+                        Error: {result.error}
+                      </div>
+                    )}
+
+                    {result.steps.length > 0 && (
+                      <div className="space-y-2">
+                        <div className="text-sm font-medium">Steps:</div>
+                        {result.steps.map((step, idx) => (
+                          <div key={idx} className="border rounded bg-background">
+                            <button
+                              onClick={() => setExpandedStep(expandedStep === `${result.testId}-${idx}` ? null : `${result.testId}-${idx}`)}
+                              className="w-full flex items-center justify-between p-3 hover:bg-muted text-left"
+                            >
+                              <div className="flex items-center gap-2">
+                                {step.status === "PASS" ? (
+                                  <CheckCircle className="h-4 w-4 text-green-500" />
+                                ) : (
+                                  <XCircle className="h-4 w-4 text-red-500" />
+                                )}
+                                <span className="text-sm font-medium">{step.name}</span>
+                              </div>
+                              <span className="text-xs text-muted-foreground">{step.message}</span>
+                            </button>
+
+                            {expandedStep === `${result.testId}-${idx}` && (
+                              <div className="border-t p-3 space-y-3">
+                                {step.request && (
+                                  <div>
+                                    <div className="text-xs font-medium mb-1 text-muted-foreground">REQUEST:</div>
+                                    <pre className="text-xs bg-black text-green-400 p-3 rounded overflow-auto max-h-60">
+                                      {step.request}
+                                    </pre>
+                                  </div>
+                                )}
+                                {step.response && (
+                                  <div>
+                                    <div className="text-xs font-medium mb-1 text-muted-foreground">RESPONSE:</div>
+                                    <pre className="text-xs bg-black text-green-400 p-3 rounded overflow-auto max-h-60">
+                                      {step.response}
+                                    </pre>
+                                  </div>
+                                )}
+                                {!step.request && !step.response && (
+                                  <div className="text-sm text-muted-foreground">No request/response data available</div>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {result.steps.length === 0 && !result.error && (
+                      <div className="text-sm text-muted-foreground">No step details available</div>
+                    )}
+                  </div>
+                )}
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Schedule Modal */}
       {isScheduleModalOpen && (
