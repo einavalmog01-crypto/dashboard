@@ -1,55 +1,73 @@
 "use client";
-import { useEffect, useState } from "react";
-export default function EvidencePreview({ itemId }: { itemId: string }) {
-  const [files, setFiles] = useState<string[]>([]);
-  const [jsonData, setJsonData] = useState<any>(null);
-useEffect(() => {
-    fetch(`/api/evidence/${itemId}`)
-      .then(res => res.json())
-      .then(setFiles);
-  }, [itemId]);
-async function loadJson(file: string) {
-    const res = await fetch(`/evidence/${itemId}/${file}`);
-    setJsonData(await res.json());
+import { useState, useRef } from "react";
+import { Button } from "@/components/ui/button";
+import { Upload, File } from "lucide-react";
+
+export default function EvidenceUpload({ itemId }: { itemId: string }) {
+  const [uploading, setUploading] = useState(false);
+  const [uploadedFiles, setUploadedFiles] = useState<string[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    setUploading(true);
+    const formData = new FormData();
+    formData.append("itemId", itemId);
+    
+    for (let i = 0; i < files.length; i++) {
+      formData.append("files", files[i]);
+    }
+
+    try {
+      const res = await fetch("/api/evidence/upload", {
+        method: "POST",
+        body: formData,
+      });
+      
+      if (res.ok) {
+        const data = await res.json();
+        setUploadedFiles(prev => [...prev, ...data.files]);
+      }
+    } catch (error) {
+      console.error("Upload failed:", error);
+    } finally {
+      setUploading(false);
+    }
   }
-return (
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-      {files.map(file => {
-        if (file.endsWith(".png") || file.endsWith(".jpg")) {
-          return (
-            <img
-              key={file}
-              src={`/evidence/${itemId}/${file}`}
-              className="rounded border"
-            />
-          );
-        }
-if (file.endsWith(".json")) {
-          return (
-            <button
-              key={file}
-              onClick={() => loadJson(file)}
-              className="border p-2 rounded text-left"
-            >
-              📄 {file}
-            </button>
-          );
-        }
-return (
-          <a
-            key={file}
-            href={`/evidence/${itemId}/${file}`}
-            download
-            className="border p-2 rounded block"
-          >
-            ⬇ {file}
-          </a>
-        );
-      })}
-{jsonData && (
-        <pre className="col-span-full bg-black text-green-400 p-4 rounded overflow-auto">
-          {JSON.stringify(jsonData, null, 2)}
-        </pre>
+
+  return (
+    <div className="border rounded-lg p-4 space-y-4">
+      <h3 className="font-semibold">Upload Evidence</h3>
+      <input
+        ref={fileInputRef}
+        type="file"
+        multiple
+        onChange={handleUpload}
+        className="hidden"
+        accept="image/*,.json,.txt,.pdf"
+      />
+      <Button
+        onClick={() => fileInputRef.current?.click()}
+        disabled={uploading}
+        variant="outline"
+        className="w-full"
+      >
+        <Upload className="mr-2 h-4 w-4" />
+        {uploading ? "Uploading..." : "Select Files"}
+      </Button>
+      
+      {uploadedFiles.length > 0 && (
+        <div className="space-y-2">
+          <p className="text-sm text-muted-foreground">Uploaded:</p>
+          {uploadedFiles.map((file, idx) => (
+            <div key={idx} className="flex items-center gap-2 text-sm">
+              <File className="h-4 w-4" />
+              {file}
+            </div>
+          ))}
+        </div>
       )}
     </div>
   );
