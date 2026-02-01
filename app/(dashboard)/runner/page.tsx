@@ -524,7 +524,7 @@ async function runSelected() {
                     <div className="flex gap-2 items-start">
                       <Checkbox
                         checked={t.selected}
-                        className="mt-1"
+                        className="mt-1 border-white data-[state=checked]:bg-primary data-[state=checked]:border-primary"
                         onCheckedChange={() =>
                           setTests(s =>
                             s.map(x => x.id === t.id ? { ...x, selected: !x.selected } : x)
