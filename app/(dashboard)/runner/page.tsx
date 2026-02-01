@@ -605,8 +605,8 @@ async function runSelected() {
                 {isRunning ? "Running..." : `Run Basic Sanity (${selectedEnv})`}
               </Button>
               <Button 
-                variant="outline"
                 onClick={() => window.open(`/logs?env=${selectedEnv}`, "_blank")}
+                className="bg-green-600 text-white hover:bg-green-700"
               >
                 View Logs ({selectedEnv})
               </Button>
