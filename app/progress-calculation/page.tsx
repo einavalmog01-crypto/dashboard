@@ -3,8 +3,7 @@
 import { useEffect, useState, DragEvent } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
-import { UserStory, Status, STATUSES, KANBAN_COLUMNS, STATUS_COLORS, StoryModal } from "./modal-helpers"
-import { useEnvironment } from "@/lib/environment-context"
+import { UserStory, Status, KANBAN_COLUMNS, STATUS_COLORS, StoryModal } from "./modal-helpers"
 
 export default function ProgressCalculationPage() {
   const [stories, setStories] = useState<UserStory[]>([])
@@ -12,11 +11,8 @@ export default function ProgressCalculationPage() {
   const [filterAssignee, setFilterAssignee] = useState("")
   const [editingStory, setEditingStory] = useState<UserStory | null>(null)
   const [isModalOpen, setIsModalOpen] = useState(false)
-  const [backendOutput, setBackendOutput] = useState<string | null>(null)
   const [draggedStoryId, setDraggedStoryId] = useState<string | null>(null)
   const [dragOverColumn, setDragOverColumn] = useState<Status | null>(null)
-
-  const { selectedEnv } = useEnvironment()
 
   useEffect(() => {
     const saved = localStorage.getItem("progressStories")
@@ -95,35 +91,12 @@ export default function ProgressCalculationPage() {
       .filter(s => s.summary.toLowerCase().includes(search.toLowerCase()))
   }
 
-  async function runTest() {
-    try {
-      const res = await fetch("/api/run/progress", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-env": selectedEnv,
-        },
-      })
-      const data = await res.json()
-      setBackendOutput(JSON.stringify(data, null, 2))
-    } catch (err) {
-      console.error("Backend test failed", err)
-      setBackendOutput("Error calling backend")
-    }
-  }
-
   return (
     <div className="p-6 space-y-6">
       {/* Header */}
       <div className="flex justify-between items-center">
         <h1 className="text-2xl font-bold">Progress Calculation</h1>
-        <Button onClick={runTest}>Run Test on Backend</Button>
       </div>
-
-      {/* Show backend output */}
-      {backendOutput && (
-        <pre className="bg-gray-100 p-2 rounded text-sm">{backendOutput}</pre>
-      )}
 
       {/* Filters */}
       <div className="flex gap-2 mb-4 items-center flex-wrap">
