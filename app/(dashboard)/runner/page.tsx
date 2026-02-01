@@ -85,8 +85,6 @@ const initialTests: TestCase[] = [
     selected: false, 
     comment: "" 
   },
-  { id: "1", name: "User Login", suite: "Auth", status: "idle", selected: true, comment: "" },
-  { id: "2", name: "Checkout Flow", suite: "E-Commerce", status: "idle", selected: true, comment: "" },
 ]
 
 // Default FRIDA evidence JSON template
