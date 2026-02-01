@@ -135,6 +135,11 @@ export default function ProgressCalculationPage() {
         {KANBAN_COLUMNS.map(column => {
           const columnStories = getStoriesForColumn(column)
           const isDropTarget = dragOverColumn === column
+          const isDoneColumn = column === "DONE"
+          const showViewOldRecords = isDoneColumn && columnStories.length > 10
+          const displayedStories = isDoneColumn && columnStories.length > 10 
+            ? columnStories.slice(0, 10) 
+            : columnStories
 
           return (
             <Card 
@@ -153,7 +158,7 @@ export default function ProgressCalculationPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-2">
-                {columnStories.map(story => (
+                {displayedStories.map(story => (
                   <div
                     key={story.id}
                     draggable
@@ -173,6 +178,16 @@ export default function ProgressCalculationPage() {
                     )}
                   </div>
                 ))}
+                {showViewOldRecords && (
+                  <Button
+                    variant="link"
+                    size="sm"
+                    className="w-full text-blue-600 hover:text-blue-800"
+                    onClick={() => window.open("/progress-calculation/history", "_blank")}
+                  >
+                    View Old Records ({columnStories.length - 10} more)
+                  </Button>
+                )}
               </CardContent>
             </Card>
           )

@@ -31,8 +31,9 @@ export default function HistoryPage() {
     const saved = localStorage.getItem("progressStories")
     if (!saved) return
     const all = normalizeStories(JSON.parse(saved))
+    // Include both DONE and CANCELLED stories (same as DONE column on main page)
     const doneStories = all
-      .filter(s => s.status === "DONE")
+      .filter(s => s.status === "DONE" || s.status === "CANCELLED")
       .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
     setStories(doneStories)
     setSelected(doneStories[0] ?? null)
@@ -42,6 +43,7 @@ export default function HistoryPage() {
     <div className="h-screen grid grid-cols-[320px_1fr]">
       {/* LEFT LIST */}
       <div className="border-r overflow-y-auto p-4 space-y-2">
+        <h2 className="text-lg font-semibold mb-3">Done Records ({stories.length})</h2>
         <input
           type="text"
           placeholder="Search..."
