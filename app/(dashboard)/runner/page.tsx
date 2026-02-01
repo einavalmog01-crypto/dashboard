@@ -339,13 +339,6 @@ async function runSelected() {
                       <StatusIcon status={t.status} />
                     </div>
                   </div>
-                  <input
-                    type="text"
-                    value={t.comment || ""}
-                    onChange={(e) => handleCommentChange(t.id, e.target.value)}
-                    placeholder="Add a comment..."
-                    className="w-full border px-2 py-1 rounded text-sm"
-                  />
                 </div>
               ))}
             </CardContent>
@@ -386,9 +379,6 @@ async function runSelected() {
               <CardTitle>Quick Actions</CardTitle>
             </CardHeader>
             <CardContent className="flex flex-col gap-2">
-              <Button onClick={() => window.open(`/run/full-sanity?env=${selectedEnv}`, "_blank")}>
-                Run Full Sanity ({selectedEnv})
-              </Button>
               <Button onClick={() => window.open(`/run/basic-sanity?env=${selectedEnv}`, "_blank")}>
                 Run Basic Sanity ({selectedEnv})
               </Button>
