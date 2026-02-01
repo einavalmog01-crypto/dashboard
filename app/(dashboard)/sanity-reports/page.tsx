@@ -8,7 +8,6 @@ import { Button } from "@/components/ui/button"
 import { FileSpreadsheet, FileJson, FileText, Eye, Trash2 } from "lucide-react"
 import jsPDF from "jspdf"
 import autoTable from "jspdf-autotable"
-import * as XLSX from "xlsx"
 
 export default function SanityReportsPage() {
   const reports = getReports()
@@ -25,30 +24,35 @@ export default function SanityReportsPage() {
   }
 
   function downloadExcel(report: any) {
-    // Create workbook and worksheet
-    const wb = XLSX.utils.book_new()
-    
-    // Prepare data for Excel
-    const data = report.tests.map((t: any) => ({
-      "Test Name": t.testName || t.name,
-      "Status": t.status,
-      "Comment": t.error || t.comment || "-"
-    }))
-    
-    const ws = XLSX.utils.json_to_sheet(data)
-    
-    // Set column widths
-    ws["!cols"] = [
-      { wch: 40 }, // Test Name
-      { wch: 10 }, // Status
-      { wch: 50 }, // Comment
-    ]
-    
-    XLSX.utils.book_append_sheet(wb, ws, "Sanity Report")
-    
-    // Generate filename with date/time
-    const filename = `${report.type}_Sanity_${formatDateForFilename(report.createdAt)}.xlsx`
-    XLSX.writeFile(wb, filename)
+    // Create CSV content (Excel compatible)
+    const escapeCSV = (str: string) => {
+      if (str.includes(",") || str.includes('"') || str.includes("\n")) {
+        return `"${str.replace(/"/g, '""')}"`
+      }
+      return str
+    }
+
+    const headers = ["Test Name", "Status", "Comment"]
+    const rows = report.tests.map((t: any) => [
+      escapeCSV(t.testName || t.name || ""),
+      escapeCSV(t.status || ""),
+      escapeCSV(t.error || t.comment || "-")
+    ])
+
+    const csvContent = [
+      headers.join(","),
+      ...rows.map((row: string[]) => row.join(","))
+    ].join("\n")
+
+    // Add BOM for Excel to recognize UTF-8
+    const BOM = "\uFEFF"
+    const blob = new Blob([BOM + csvContent], { type: "text/csv;charset=utf-8;" })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = `${report.type}_Sanity_${formatDateForFilename(report.createdAt)}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
   }
 
   function downloadPDF(report: any) {
@@ -153,7 +157,7 @@ export default function SanityReportsPage() {
                     className="text-green-600 border-green-600 hover:bg-green-50"
                   >
                     <FileSpreadsheet className="h-4 w-4 mr-1" />
-                    Excel
+                    CSV
                   </Button>
                   <Button
                     variant="outline"

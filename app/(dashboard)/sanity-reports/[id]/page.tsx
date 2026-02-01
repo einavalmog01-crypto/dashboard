@@ -7,7 +7,6 @@ import { Badge } from "@/components/ui/badge"
 import { FileSpreadsheet, FileJson, FileText, ArrowLeft } from "lucide-react"
 import jsPDF from "jspdf"
 import autoTable from "jspdf-autotable"
-import * as XLSX from "xlsx"
 
 export default function SanityReportPage() {
   const router = useRouter()
@@ -35,23 +34,33 @@ export default function SanityReportPage() {
   }
 
   function downloadExcel() {
-    const wb = XLSX.utils.book_new()
-    
-    const data = report.tests.map((t) => ({
-      "Test Name": t.testName || t.name,
-      "Status": t.status,
-      "Comment": t.error || "-"
-    }))
-    
-    const ws = XLSX.utils.json_to_sheet(data)
-    ws["!cols"] = [
-      { wch: 40 },
-      { wch: 10 },
-      { wch: 50 },
-    ]
-    
-    XLSX.utils.book_append_sheet(wb, ws, "Sanity Report")
-    XLSX.writeFile(wb, `${report.type}_Sanity_${formatDateForFilename(report.createdAt)}.xlsx`)
+    const escapeCSV = (str: string) => {
+      if (str.includes(",") || str.includes('"') || str.includes("\n")) {
+        return `"${str.replace(/"/g, '""')}"`
+      }
+      return str
+    }
+
+    const headers = ["Test Name", "Status", "Comment"]
+    const rows = report.tests.map((t) => [
+      escapeCSV(t.testName || t.name || ""),
+      escapeCSV(t.status || ""),
+      escapeCSV(t.error || "-")
+    ])
+
+    const csvContent = [
+      headers.join(","),
+      ...rows.map((row: string[]) => row.join(","))
+    ].join("\n")
+
+    const BOM = "\uFEFF"
+    const blob = new Blob([BOM + csvContent], { type: "text/csv;charset=utf-8;" })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = `${report.type}_Sanity_${formatDateForFilename(report.createdAt)}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
   }
 
   function downloadPDF() {
@@ -120,7 +129,7 @@ export default function SanityReportPage() {
       <div className="flex gap-2">
         <Button variant="outline" onClick={downloadExcel} className="text-green-600 border-green-600">
           <FileSpreadsheet className="h-4 w-4 mr-2" />
-          Download Excel
+          Download CSV
         </Button>
         <Button variant="outline" onClick={downloadPDF}>
           <FileText className="h-4 w-4 mr-2" />
