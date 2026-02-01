@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge"
 import { Checkbox } from "@/components/ui/checkbox"
 import { useEnvironment } from "@/lib/environment-context"
 import { CheckCircle, XCircle, Clock, Loader2, Settings2 } from "lucide-react"
+import { RunnerBranchesSidebar } from "@/components/runner/branches-sidebar"
 
 interface TestCase {
   id: string
@@ -502,7 +503,14 @@ async function runSelected() {
   }
 
   return (
-    <>
+    <div className="flex h-full">
+      {/* Branches Sidebar */}
+      <div className="w-[400px] border-r">
+        <RunnerBranchesSidebar />
+      </div>
+
+      {/* Main Test Runner Content */}
+      <div className="flex-1 overflow-y-auto p-6">
       <div className="grid gap-6 lg:grid-cols-3">
         {/* Test Queue */}
         <div className="lg:col-span-2">
@@ -846,7 +854,8 @@ async function runSelected() {
           </div>
         </div>
       )}
-    </>
+      </div>
+    </div>
   )
 }
 
