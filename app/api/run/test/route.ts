@@ -47,10 +47,8 @@ export async function POST(request: Request) {
 
     // Route to the appropriate test handler
     switch (testId) {
-      case "cable-retail-submit-order":
-        return await runCableSubmitOrder(config, environment, "Retail", customTemplates)
-      case "cable-telesales-submit-order":
-        return await runCableSubmitOrder(config, environment, "Telesales", customTemplates)
+      case "cable-submit-order":
+        return await runCableSubmitOrder(config, environment, customTemplates)
       default:
         // For other tests, simulate execution
         return await runGenericTest(testId, testName, config)
@@ -67,20 +65,19 @@ export async function POST(request: Request) {
 async function runCableSubmitOrder(
   config: TestRunRequest["config"],
   environment: string,
-  channel: "Retail" | "Telesales",
   customTemplates?: { [stepName: string]: string }
 ) {
   const { auth, db, endpoint } = config
 
   // Generate random OrderID
   const orderId = Math.floor(100000000 + Math.random() * 900000000).toString()
-  console.log(`[Cable${channel}SubmitOrder] Generated OrderID: ${orderId}`)
+  console.log(`[CableSubmitOrder] Generated OrderID: ${orderId}`)
 
   const steps: { name: string; status: "PASS" | "FAILED"; message: string; request?: string; response?: string }[] = []
 
   try {
     // STEP 1: SubmitOrder (GenerateContract)
-    console.log(`[Cable${channel}SubmitOrder] Step 1: SubmitOrder (GenerateContract)`)
+    console.log(`[CableSubmitOrder] Step 1: SubmitOrder (GenerateContract)`)
     
     // Use custom template if provided, otherwise use default
     let submitOrderXml: string
@@ -134,7 +131,7 @@ async function runCableSubmitOrder(
       throw new Error("OGWOrderID not found in GenerateContract response")
     }
     const ogwOrderId = ogwOrderIdMatch[1]
-    console.log(`[Cable${channel}SubmitOrder] Extracted OGWOrderID: ${ogwOrderId}`)
+    console.log(`[CableSubmitOrder] Extracted OGWOrderID: ${ogwOrderId}`)
 
     steps.push({ 
       name: "SubmitOrder (GenerateContract)", 
@@ -145,7 +142,7 @@ async function runCableSubmitOrder(
     })
 
     // STEP 2: SubmitOrder (Fulfillment)
-    console.log(`[Cable${channel}SubmitOrder] Step 2: SubmitOrder (Fulfillment)`)
+    console.log(`[CableSubmitOrder] Step 2: SubmitOrder (Fulfillment)`)
     
     // Use custom template if provided, otherwise use default
     let fulfillmentXml: string
@@ -194,7 +191,7 @@ async function runCableSubmitOrder(
     })
 
     // STEP 3: Wait for DB status = C after Fulfillment
-    console.log(`[Cable${channel}SubmitOrder] Step 3: Waiting for DB status C (after Fulfillment)`)
+    console.log(`[CableSubmitOrder] Step 3: Waiting for DB status C (after Fulfillment)`)
     
     const dbCheckAfterFulfillment = await waitForSOSCompletion(
       db,
@@ -224,7 +221,7 @@ async function runCableSubmitOrder(
     })
 
     // STEP 4: SetOrderStatus
-    console.log(`[Cable${channel}SubmitOrder] Step 3: SetOrderStatus`)
+    console.log(`[CableSubmitOrder] Step 3: SetOrderStatus`)
     
     // Use custom template if provided, otherwise use default
     let setOrderStatusXml: string
@@ -273,7 +270,7 @@ async function runCableSubmitOrder(
     })
 
     // STEP 6: Wait for DB status = C after SetOrderStatus
-    console.log(`[Cable${channel}SubmitOrder] Step 6: Waiting for DB status C (after SetOrderStatus)`)
+    console.log(`[CableSubmitOrder] Step 6: Waiting for DB status C (after SetOrderStatus)`)
     
     const dbCheckAfterSetStatus = await waitForSOSCompletion(
       db,
@@ -303,7 +300,7 @@ async function runCableSubmitOrder(
     })
 
     // STEP 7: Download CDM JSON
-    console.log(`[Cable${channel}SubmitOrder] Step 7: Downloading CDM JSON`)
+    console.log(`[CableSubmitOrder] Step 7: Downloading CDM JSON`)
     
     // Extract host without port for CDM endpoint (uses port 16500)
     const hostWithoutPort = endpoint.host.replace(/:\d+$/, "").replace(/^https?:\/\//, "")
@@ -328,7 +325,7 @@ async function runCableSubmitOrder(
           response: cdmText
         })
         // Don't throw - CDM download failure shouldn't fail the whole test
-        console.log(`[Cable${channel}SubmitOrder] CDM download failed but continuing...`)
+        console.log(`[CableSubmitOrder] CDM download failed but continuing...`)
       } else {
         // Try to parse and pretty-print JSON
         let cdmFormatted = cdmText
@@ -355,22 +352,21 @@ async function runCableSubmitOrder(
         request: `GET ${cdmUrl}`,
         response: "Connection failed"
       })
-      console.log(`[Cable${channel}SubmitOrder] CDM download error but continuing...`)
+      console.log(`[CableSubmitOrder] CDM download error but continuing...`)
     }
 
-    console.log(`[Cable${channel}SubmitOrder] All steps completed successfully for OGWOrderID: ${ogwOrderId}`)
+    console.log(`[CableSubmitOrder] All steps completed successfully for OGWOrderID: ${ogwOrderId}`)
 
     return NextResponse.json({
       success: true,
       orderId,
       ogwOrderId,
-      channel,
       steps,
-      message: `Cable ${channel} Submit Order completed successfully. OGWOrderID: ${ogwOrderId}`,
+      message: `Cable Submit Order completed successfully. OGWOrderID: ${ogwOrderId}`,
     })
 
   } catch (error) {
-    console.error(`[Cable${channel}SubmitOrder] Error:`, error)
+    console.error(`[CableSubmitOrder] Error:`, error)
     return NextResponse.json({
       success: false,
       orderId,
