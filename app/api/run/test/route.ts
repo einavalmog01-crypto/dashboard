@@ -302,6 +302,62 @@ async function runCableSubmitOrder(
       response: `Order Line IDs: ${dbCheckAfterSetStatus.orderLineIds?.join(", ") || "N/A"}`
     })
 
+    // STEP 7: Download CDM JSON
+    console.log(`[Cable${channel}SubmitOrder] Step 7: Downloading CDM JSON`)
+    
+    // Extract host without port for CDM endpoint (uses port 16500)
+    const hostWithoutPort = endpoint.host.replace(/:\d+$/, "").replace(/^https?:\/\//, "")
+    const cdmUrl = `http://${hostWithoutPort}:16500/getCdm?ID=${ogwOrderId}`
+    
+    try {
+      const cdmResponse = await fetch(cdmUrl, {
+        method: "GET",
+        headers: {
+          "Accept": "application/json",
+        },
+      })
+
+      const cdmText = await cdmResponse.text()
+      
+      if (!cdmResponse.ok) {
+        steps.push({
+          name: "Download CDM",
+          status: "FAILED",
+          message: `HTTP ${cdmResponse.status}: Failed to download CDM`,
+          request: `GET ${cdmUrl}`,
+          response: cdmText
+        })
+        // Don't throw - CDM download failure shouldn't fail the whole test
+        console.log(`[Cable${channel}SubmitOrder] CDM download failed but continuing...`)
+      } else {
+        // Try to parse and pretty-print JSON
+        let cdmFormatted = cdmText
+        try {
+          const cdmJson = JSON.parse(cdmText)
+          cdmFormatted = JSON.stringify(cdmJson, null, 2)
+        } catch {
+          // Keep as-is if not valid JSON
+        }
+
+        steps.push({
+          name: "Download CDM",
+          status: "PASS",
+          message: `CDM downloaded successfully for OGWOrderID: ${ogwOrderId}`,
+          request: `GET ${cdmUrl}`,
+          response: cdmFormatted
+        })
+      }
+    } catch (cdmError) {
+      steps.push({
+        name: "Download CDM",
+        status: "FAILED",
+        message: `Network error downloading CDM: ${cdmError instanceof Error ? cdmError.message : "Unknown"}`,
+        request: `GET ${cdmUrl}`,
+        response: "Connection failed"
+      })
+      console.log(`[Cable${channel}SubmitOrder] CDM download error but continuing...`)
+    }
+
     console.log(`[Cable${channel}SubmitOrder] All steps completed successfully for OGWOrderID: ${ogwOrderId}`)
 
     return NextResponse.json({
@@ -336,16 +392,13 @@ async function waitForSOSCompletion(
   sleepInterval: number = 5000
 ): Promise<{ success: boolean; message: string; attempts: number; orderLineIds?: string[] }> {
   console.log(`[DB Check] ${stepName}: Checking order status for OGWOrderID: ${ogwOrderId}`)
-  
-  // Build Oracle connection string
-  const connectionString = db.connectionType === "sid" 
-    ? `${db.hostname}:${db.port}/${db.sid}`
-    : `${db.hostname}:${db.port}/${db.serviceName}`
 
+  // Query includes MESSAGE_STATUS, ORDER_LINE_ID, and ErrorCode from MESSAGE_DATA
   const query = `
     SELECT 
       M.MESSAGE_STATUS,
-      EXTRACTVALUE(XMLTYPE(M.MESSAGE_DATA), '//*[local-name()="OGWOrderLineId"]') AS ORDER_LINE_ID
+      EXTRACTVALUE(XMLTYPE(M.MESSAGE_DATA), '//*[local-name()="OGWOrderLineId"]') AS ORDER_LINE_ID,
+      EXTRACTVALUE(XMLTYPE(M.MESSAGE_DATA), '//*[local-name()="ErrorCode"]') AS ERROR_CODE
     FROM set_order_status_req_handler M
     WHERE TRIM(M.CDM_TXID) = TRIM('${ogwOrderId}')
     ORDER BY TO_NUMBER(M.SUBSCRIBE_MESSAGE_ID)
@@ -388,22 +441,33 @@ async function waitForSOSCompletion(
         continue
       }
 
-      // Check if all rows have MESSAGE_STATUS = 'C'
+      // Check if all rows have MESSAGE_STATUS = 'C' and ErrorCode = 'OGWERR-0000'
       let allCompleted = true
       const orderLineIds: string[] = []
       
       for (const row of rows) {
         const status = row.MESSAGE_STATUS || row[0]
         const lineId = row.ORDER_LINE_ID || row[1]
+        const errorCode = row.ERROR_CODE || row[2]
         
         if (lineId && /^\d+$/.test(lineId)) {
           orderLineIds.push(lineId)
         }
         
+        // Check for failed status
         if (status === "F") {
           return {
             success: false,
             message: `SetOrderStatus failed for OrderLineID ${lineId}`,
+            attempts: attempt,
+          }
+        }
+        
+        // Check for error code (anything other than OGWERR-0000 is an error)
+        if (errorCode && errorCode !== "OGWERR-0000" && errorCode !== "") {
+          return {
+            success: false,
+            message: `Error for OrderLineID ${lineId}: ${errorCode}`,
             attempts: attempt,
           }
         }
