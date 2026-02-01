@@ -604,6 +604,12 @@ async function runSelected() {
               >
                 {isRunning ? "Running..." : `Run Basic Sanity (${selectedEnv})`}
               </Button>
+              <Button 
+                variant="outline"
+                onClick={() => window.open(`/logs?env=${selectedEnv}`, "_blank")}
+              >
+                View Logs ({selectedEnv})
+              </Button>
               <Button onClick={() => setIsScheduleModalOpen(true)} variant="outline">
                 Schedule Sanity
               </Button>
