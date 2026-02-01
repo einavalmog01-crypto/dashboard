@@ -11,9 +11,18 @@ export type Branch = {
   createdAt: number
 }
 
+export type Folder = {
+  id: string
+  branchId: string
+  name: string  // "US" or "CRs/SRs"
+  type: "us" | "crs-srs"
+  createdAt: number
+}
+
 export type SubItem = {
   id: string
   branchId: string
+  folderId: string  // Reference to parent folder
   type: "user-story" | "cr"
   name: string
   description?: string
@@ -49,11 +58,18 @@ interface TestCasesContextType {
   editBranch: (id: string, name: string) => void
   deleteBranch: (id: string) => void
   
+  // Folders (auto-created with branches)
+  folders: Folder[]
+  selectedFolderId: string | null
+  setSelectedFolderId: (id: string | null) => void
+  editFolder: (id: string, name: string) => void
+  deleteFolder: (id: string) => void
+  
   // Sub Items (User Stories / CRs)
   subItems: SubItem[]
   selectedSubItemId: string | null
   setSelectedSubItemId: (id: string | null) => void
-  addSubItem: (branchId: string, type: "user-story" | "cr", name: string, description?: string) => void
+  addSubItem: (folderId: string, type: "user-story" | "cr", name: string, description?: string) => void
   editSubItem: (id: string, name: string, description?: string) => void
   deleteSubItem: (id: string) => void
   
@@ -79,9 +95,9 @@ function slugify(value: string) {
 }
 
 // Helper function to load initial data from localStorage
-function loadInitialData(): { branches: Branch[]; subItems: SubItem[]; testCases: TestCase[] } {
+function loadInitialData(): { branches: Branch[]; folders: Folder[]; subItems: SubItem[]; testCases: TestCase[] } {
   if (typeof window === "undefined") {
-    return { branches: [], subItems: [], testCases: [] }
+    return { branches: [], folders: [], subItems: [], testCases: [] }
   }
   try {
     const stored = localStorage.getItem(STORAGE_KEY)
@@ -89,6 +105,7 @@ function loadInitialData(): { branches: Branch[]; subItems: SubItem[]; testCases
       const data = JSON.parse(stored)
       return {
         branches: data.branches || [],
+        folders: data.folders || [],
         subItems: data.subItems || [],
         testCases: data.testCases || [],
       }
@@ -96,21 +113,24 @@ function loadInitialData(): { branches: Branch[]; subItems: SubItem[]; testCases
   } catch {
     // Use defaults
   }
-  return { branches: [], subItems: [], testCases: [] }
+  return { branches: [], folders: [], subItems: [], testCases: [] }
 }
 
 export function TestCasesProvider({ children }: { children: ReactNode }) {
   const [isHydrated, setIsHydrated] = useState(false)
   const [branches, setBranches] = useState<Branch[]>([])
+  const [folders, setFolders] = useState<Folder[]>([])
   const [subItems, setSubItems] = useState<SubItem[]>([])
   const [testCases, setTestCases] = useState<TestCase[]>([])
   const [selectedBranchId, setSelectedBranchId] = useState<string | null>(null)
+  const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null)
   const [selectedSubItemId, setSelectedSubItemId] = useState<string | null>(null)
 
   // Load from localStorage on mount (only once)
   useEffect(() => {
     const data = loadInitialData()
     setBranches(data.branches)
+    setFolders(data.folders)
     setSubItems(data.subItems)
     setTestCases(data.testCases)
     setIsHydrated(true)
@@ -120,21 +140,38 @@ export function TestCasesProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!isHydrated) return
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({ branches, subItems, testCases }))
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ branches, folders, subItems, testCases }))
     } catch {
       // Ignore
     }
-  }, [branches, subItems, testCases, isHydrated])
+  }, [branches, folders, subItems, testCases, isHydrated])
 
   // Branch functions
   const addBranch = (name: string) => {
+    const branchId = nanoid()
     const newBranch: Branch = {
-      id: nanoid(),
+      id: branchId,
       name,
       slug: slugify(name),
       createdAt: Date.now(),
     }
+    // Auto-create US and CRs/SRs folders
+    const usFolder: Folder = {
+      id: nanoid(),
+      branchId,
+      name: "US",
+      type: "us",
+      createdAt: Date.now(),
+    }
+    const crsFolder: Folder = {
+      id: nanoid(),
+      branchId,
+      name: "CRs/SRs",
+      type: "crs-srs",
+      createdAt: Date.now(),
+    }
     setBranches(prev => [newBranch, ...prev])
+    setFolders(prev => [...prev, usFolder, crsFolder])
   }
 
   const editBranch = (id: string, name: string) => {
@@ -145,22 +182,51 @@ export function TestCasesProvider({ children }: { children: ReactNode }) {
 
   const deleteBranch = (id: string) => {
     setBranches(prev => prev.filter(b => b.id !== id))
-    // Also delete sub-items and test cases for this branch
-    const branchSubItems = subItems.filter(s => s.branchId === id)
+    // Also delete folders, sub-items and test cases for this branch
+    const branchFolders = folders.filter(f => f.branchId === id)
+    const folderIds = branchFolders.map(f => f.id)
+    const branchSubItems = subItems.filter(s => folderIds.includes(s.folderId))
     const subItemIds = branchSubItems.map(s => s.id)
-    setSubItems(prev => prev.filter(s => s.branchId !== id))
+    setFolders(prev => prev.filter(f => f.branchId !== id))
+    setSubItems(prev => prev.filter(s => !folderIds.includes(s.folderId)))
     setTestCases(prev => prev.filter(t => !subItemIds.includes(t.subItemId)))
     if (selectedBranchId === id) {
       setSelectedBranchId(null)
+      setSelectedFolderId(null)
+      setSelectedSubItemId(null)
+    }
+  }
+
+  // Folder functions
+  const editFolder = (id: string, name: string) => {
+    setFolders(prev =>
+      prev.map(f => (f.id === id ? { ...f, name } : f))
+    )
+  }
+
+  const deleteFolder = (id: string) => {
+    const folder = folders.find(f => f.id === id)
+    if (!folder) return
+    // Delete folder, its sub-items, and their test cases
+    const folderSubItems = subItems.filter(s => s.folderId === id)
+    const subItemIds = folderSubItems.map(s => s.id)
+    setFolders(prev => prev.filter(f => f.id !== id))
+    setSubItems(prev => prev.filter(s => s.folderId !== id))
+    setTestCases(prev => prev.filter(t => !subItemIds.includes(t.subItemId)))
+    if (selectedFolderId === id) {
+      setSelectedFolderId(null)
       setSelectedSubItemId(null)
     }
   }
 
   // Sub Item functions
-  const addSubItem = (branchId: string, type: "user-story" | "cr", name: string, description?: string) => {
+  const addSubItem = (folderId: string, type: "user-story" | "cr", name: string, description?: string) => {
+    const folder = folders.find(f => f.id === folderId)
+    if (!folder) return
     const newSubItem: SubItem = {
       id: nanoid(),
-      branchId,
+      branchId: folder.branchId,
+      folderId,
       type,
       name,
       description,
@@ -262,6 +328,11 @@ export function TestCasesProvider({ children }: { children: ReactNode }) {
         addBranch,
         editBranch,
         deleteBranch,
+        folders,
+        selectedFolderId,
+        setSelectedFolderId,
+        editFolder,
+        deleteFolder,
         subItems,
         selectedSubItemId,
         setSelectedSubItemId,

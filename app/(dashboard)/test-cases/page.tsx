@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useMemo } from "react"
-import { useTestCases, type Branch, type SubItem, type TestCase } from "@/lib/test-cases-context"
+import { useTestCases, type Branch, type Folder, type SubItem, type TestCase } from "@/lib/test-cases-context"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -72,6 +72,11 @@ export default function TestCasesPage() {
     addBranch,
     editBranch,
     deleteBranch,
+    folders,
+    selectedFolderId,
+    setSelectedFolderId,
+    editFolder,
+    deleteFolder,
     subItems,
     selectedSubItemId,
     setSelectedSubItemId,
@@ -95,12 +100,16 @@ export default function TestCasesPage() {
   const [editingBranch, setEditingBranch] = useState<Branch | null>(null)
   const [branchName, setBranchName] = useState("")
 
+  const [folderDialogOpen, setFolderDialogOpen] = useState(false)
+  const [editingFolder, setEditingFolder] = useState<Folder | null>(null)
+  const [folderName, setFolderName] = useState("")
+
   const [subItemDialogOpen, setSubItemDialogOpen] = useState(false)
   const [editingSubItem, setEditingSubItem] = useState<SubItem | null>(null)
   const [subItemType, setSubItemType] = useState<"user-story" | "cr">("user-story")
   const [subItemName, setSubItemName] = useState("")
   const [subItemDescription, setSubItemDescription] = useState("")
-  const [addingSubItemToBranchId, setAddingSubItemToBranchId] = useState<string | null>(null)
+  const [addingSubItemToFolderId, setAddingSubItemToFolderId] = useState<string | null>(null)
 
   const [testCaseDialogOpen, setTestCaseDialogOpen] = useState(false)
   const [editingTestCase, setEditingTestCase] = useState<TestCase | null>(null)
@@ -114,27 +123,34 @@ export default function TestCasesPage() {
 
   // Delete confirmation states
   const [deletingBranch, setDeletingBranch] = useState<Branch | null>(null)
+  const [deletingFolder, setDeletingFolder] = useState<Folder | null>(null)
   const [deletingSubItem, setDeletingSubItem] = useState<SubItem | null>(null)
   const [deletingTestCase, setDeletingTestCase] = useState<TestCase | null>(null)
 
-  // Expanded branches state
+  // Expanded branches and folders state
   const [expandedBranches, setExpandedBranches] = useState<Set<string>>(new Set())
+  const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set())
 
-  // Selected branch data
+  // Selected branch and folder data
   const selectedBranch = branches.find(b => b.id === selectedBranchId)
-  const branchSubItems = useMemo(() => 
-    subItems.filter(s => s.branchId === selectedBranchId),
-    [subItems, selectedBranchId]
+  const selectedFolder = folders.find(f => f.id === selectedFolderId)
+  const branchFolders = useMemo(() => 
+    folders.filter(f => f.branchId === selectedBranchId),
+    [folders, selectedBranchId]
+  )
+  const folderSubItems = useMemo(() => 
+    subItems.filter(s => s.folderId === selectedFolderId),
+    [subItems, selectedFolderId]
   )
 
   // Filtered sub-items based on search
   const filteredSubItems = useMemo(() => {
-    if (!searchQuery) return branchSubItems
-    return branchSubItems.filter(s => 
+    if (!searchQuery) return folderSubItems
+    return folderSubItems.filter(s => 
       s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       s.description?.toLowerCase().includes(searchQuery.toLowerCase())
     )
-  }, [branchSubItems, searchQuery])
+  }, [folderSubItems, searchQuery])
 
   // Selected sub-item data
   const selectedSubItem = subItems.find(s => s.id === selectedSubItemId)
@@ -151,6 +167,19 @@ export default function TestCasesPage() {
         next.delete(branchId)
       } else {
         next.add(branchId)
+      }
+      return next
+    })
+  }
+
+  // Toggle folder expansion
+  const toggleFolder = (folderId: string) => {
+    setExpandedFolders(prev => {
+      const next = new Set(prev)
+      if (next.has(folderId)) {
+        next.delete(folderId)
+      } else {
+        next.add(folderId)
       }
       return next
     })
@@ -179,11 +208,27 @@ export default function TestCasesPage() {
     setBranchDialogOpen(false)
   }
 
+  // Folder dialog handlers
+  const openEditFolderDialog = (folder: Folder) => {
+    setEditingFolder(folder)
+    setFolderName(folder.name)
+    setFolderDialogOpen(true)
+  }
+
+  const saveFolder = () => {
+    if (!folderName.trim() || !editingFolder) return
+    editFolder(editingFolder.id, folderName.trim())
+    setFolderDialogOpen(false)
+  }
+
   // Sub-item dialog handlers
-  const openAddSubItemDialog = (branchId: string, type: "user-story" | "cr") => {
+  const openAddSubItemDialog = (folderId: string) => {
+    const folder = folders.find(f => f.id === folderId)
+    if (!folder) return
     setEditingSubItem(null)
-    setAddingSubItemToBranchId(branchId)
-    setSubItemType(type)
+    setAddingSubItemToFolderId(folderId)
+    // Determine type based on folder
+    setSubItemType(folder.type === "us" ? "user-story" : "cr")
     setSubItemName("")
     setSubItemDescription("")
     setSubItemDialogOpen(true)
@@ -202,8 +247,8 @@ export default function TestCasesPage() {
     if (!subItemName.trim()) return
     if (editingSubItem) {
       editSubItem(editingSubItem.id, subItemName.trim(), subItemDescription.trim() || undefined)
-    } else if (addingSubItemToBranchId) {
-      addSubItem(addingSubItemToBranchId, subItemType, subItemName.trim(), subItemDescription.trim() || undefined)
+    } else if (addingSubItemToFolderId) {
+      addSubItem(addingSubItemToFolderId, subItemType, subItemName.trim(), subItemDescription.trim() || undefined)
     }
     setSubItemDialogOpen(false)
   }
@@ -303,14 +348,14 @@ export default function TestCasesPage() {
               {branches.sort((a, b) => b.createdAt - a.createdAt).map(branch => {
                 const isExpanded = expandedBranches.has(branch.id)
                 const isSelected = selectedBranchId === branch.id
-                const branchItems = subItems.filter(s => s.branchId === branch.id)
+                const branchFoldersList = folders.filter(f => f.branchId === branch.id)
 
                 return (
                   <div key={branch.id}>
                     <div
                       className={cn(
                         "flex items-center gap-1 px-2 py-1.5 rounded-md cursor-pointer group",
-                        isSelected ? "bg-primary/10" : "hover:bg-accent"
+                        isSelected && !selectedFolderId ? "bg-primary/10" : "hover:bg-accent"
                       )}
                     >
                       <button
@@ -328,6 +373,7 @@ export default function TestCasesPage() {
                         className="flex-1 text-sm truncate"
                         onClick={() => {
                           setSelectedBranchId(branch.id)
+                          setSelectedFolderId(null)
                           setSelectedSubItemId(null)
                           if (!isExpanded) toggleBranch(branch.id)
                         }}
@@ -350,15 +396,6 @@ export default function TestCasesPage() {
                             Edit
                           </DropdownMenuItem>
                           <DropdownMenuSeparator />
-                          <DropdownMenuItem onClick={() => openAddSubItemDialog(branch.id, "user-story")}>
-                            <Plus className="mr-2 h-4 w-4" />
-                            Add User Story
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => openAddSubItemDialog(branch.id, "cr")}>
-                            <Plus className="mr-2 h-4 w-4" />
-                            Add CR
-                          </DropdownMenuItem>
-                          <DropdownMenuSeparator />
                           <DropdownMenuItem
                             className="text-destructive"
                             onClick={() => setDeletingBranch(branch)}
@@ -370,63 +407,134 @@ export default function TestCasesPage() {
                       </DropdownMenu>
                     </div>
 
-                    {/* Sub-items under branch */}
+                    {/* Folders under branch (US and CRs/SRs) */}
                     {isExpanded && (
                       <div className="ml-6 mt-1 space-y-0.5">
-                        {branchItems.length === 0 ? (
-                          <p className="text-xs text-muted-foreground pl-4 py-1">No items</p>
-                        ) : (
-                          branchItems.map(item => (
-                            <div
-                              key={item.id}
-                              className={cn(
-                                "flex items-center gap-2 px-2 py-1.5 rounded-md cursor-pointer group",
-                                selectedSubItemId === item.id ? "bg-primary text-primary-foreground" : "hover:bg-accent"
+                        {branchFoldersList.map(folder => {
+                          const isFolderExpanded = expandedFolders.has(folder.id)
+                          const isFolderSelected = selectedFolderId === folder.id
+                          const folderItems = subItems.filter(s => s.folderId === folder.id)
+
+                          return (
+                            <div key={folder.id}>
+                              <div
+                                className={cn(
+                                  "flex items-center gap-1 px-2 py-1.5 rounded-md cursor-pointer group",
+                                  isFolderSelected ? "bg-primary/10" : "hover:bg-accent"
+                                )}
+                              >
+                                <button
+                                  onClick={() => toggleFolder(folder.id)}
+                                  className="p-0.5 hover:bg-accent rounded"
+                                >
+                                  {isFolderExpanded ? (
+                                    <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+                                  ) : (
+                                    <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
+                                  )}
+                                </button>
+                                <FolderOpen className="h-3.5 w-3.5 text-muted-foreground" />
+                                <span
+                                  className="flex-1 text-sm truncate"
+                                  onClick={() => {
+                                    setSelectedBranchId(branch.id)
+                                    setSelectedFolderId(folder.id)
+                                    setSelectedSubItemId(null)
+                                    if (!isFolderExpanded) toggleFolder(folder.id)
+                                  }}
+                                >
+                                  {folder.name}
+                                </span>
+                                <Badge variant="outline" className="text-xs">
+                                  {folderItems.length}
+                                </Badge>
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger asChild onClick={e => e.stopPropagation()}>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-5 w-5 opacity-0 group-hover:opacity-100"
+                                    >
+                                      <MoreVertical className="h-3 w-3" />
+                                    </Button>
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent align="end">
+                                    <DropdownMenuItem onClick={() => openEditFolderDialog(folder)}>
+                                      <Pencil className="mr-2 h-4 w-4" />
+                                      Edit
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem onClick={() => openAddSubItemDialog(folder.id)}>
+                                      <Plus className="mr-2 h-4 w-4" />
+                                      Add {folder.type === "us" ? "User Story" : "CR/SR"}
+                                    </DropdownMenuItem>
+                                    <DropdownMenuSeparator />
+                                    <DropdownMenuItem
+                                      className="text-destructive"
+                                      onClick={() => setDeletingFolder(folder)}
+                                    >
+                                      <Trash2 className="mr-2 h-4 w-4" />
+                                      Remove
+                                    </DropdownMenuItem>
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
+                              </div>
+
+                              {/* Items under folder */}
+                              {isFolderExpanded && (
+                                <div className="ml-6 mt-1 space-y-0.5">
+                                  {folderItems.length === 0 ? (
+                                    <p className="text-xs text-muted-foreground pl-4 py-1">No items</p>
+                                  ) : (
+                                    folderItems.map(item => (
+                                      <div
+                                        key={item.id}
+                                        className={cn(
+                                          "flex items-center gap-2 px-2 py-1.5 rounded-md cursor-pointer group",
+                                          selectedSubItemId === item.id ? "bg-primary text-primary-foreground" : "hover:bg-accent"
+                                        )}
+                                        onClick={() => {
+                                          setSelectedBranchId(branch.id)
+                                          setSelectedFolderId(folder.id)
+                                          setSelectedSubItemId(item.id)
+                                        }}
+                                      >
+                                        <FileText className="h-3.5 w-3.5" />
+                                        <span className="flex-1 text-sm truncate">{item.name}</span>
+                                        <DropdownMenu>
+                                          <DropdownMenuTrigger asChild onClick={e => e.stopPropagation()}>
+                                            <Button
+                                              variant="ghost"
+                                              size="icon"
+                                              className={cn(
+                                                "h-5 w-5 opacity-0 group-hover:opacity-100",
+                                                selectedSubItemId === item.id && "text-primary-foreground"
+                                              )}
+                                            >
+                                              <MoreVertical className="h-3 w-3" />
+                                            </Button>
+                                          </DropdownMenuTrigger>
+                                          <DropdownMenuContent align="end">
+                                            <DropdownMenuItem onClick={() => openEditSubItemDialog(item)}>
+                                              <Pencil className="mr-2 h-4 w-4" />
+                                              Edit
+                                            </DropdownMenuItem>
+                                            <DropdownMenuItem
+                                              className="text-destructive"
+                                              onClick={() => setDeletingSubItem(item)}
+                                            >
+                                              <Trash2 className="mr-2 h-4 w-4" />
+                                              Remove
+                                            </DropdownMenuItem>
+                                          </DropdownMenuContent>
+                                        </DropdownMenu>
+                                      </div>
+                                    ))
+                                  )}
+                                </div>
                               )}
-                              onClick={() => {
-                                setSelectedBranchId(branch.id)
-                                setSelectedSubItemId(item.id)
-                              }}
-                            >
-                              {item.type === "user-story" ? (
-                                <FileText className="h-3.5 w-3.5" />
-                              ) : (
-                                <FolderOpen className="h-3.5 w-3.5" />
-                              )}
-                              <span className="flex-1 text-sm truncate">{item.name}</span>
-                              <Badge variant="outline" className={cn("text-xs", selectedSubItemId === item.id && "border-primary-foreground/50")}>
-                                {item.type === "user-story" ? "US" : "CR"}
-                              </Badge>
-                              <DropdownMenu>
-                                <DropdownMenuTrigger asChild onClick={e => e.stopPropagation()}>
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className={cn(
-                                      "h-5 w-5 opacity-0 group-hover:opacity-100",
-                                      selectedSubItemId === item.id && "text-primary-foreground"
-                                    )}
-                                  >
-                                    <MoreVertical className="h-3 w-3" />
-                                  </Button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end">
-                                  <DropdownMenuItem onClick={() => openEditSubItemDialog(item)}>
-                                    <Pencil className="mr-2 h-4 w-4" />
-                                    Edit
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem
-                                    className="text-destructive"
-                                    onClick={() => setDeletingSubItem(item)}
-                                  >
-                                    <Trash2 className="mr-2 h-4 w-4" />
-                                    Remove
-                                  </DropdownMenuItem>
-                                </DropdownMenuContent>
-                              </DropdownMenu>
                             </div>
-                          ))
-                        )}
+                          )
+                        })}
                       </div>
                     )}
                   </div>
@@ -464,19 +572,31 @@ export default function TestCasesPage() {
               <GitBranch className="h-12 w-12 mx-auto mb-4 opacity-50" />
               <p>Select a branch from the sidebar to view its test cases</p>
             </div>
+          ) : !selectedFolderId ? (
+            <div className="text-center text-muted-foreground py-12">
+              <FolderOpen className="h-12 w-12 mx-auto mb-4 opacity-50" />
+              <p>Select a folder (US or CRs/SRs) from the sidebar</p>
+            </div>
           ) : !selectedSubItemId ? (
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <h2 className="text-lg font-medium">
-                  {selectedBranch?.name} - User Stories / CRs
+                  {selectedBranch?.name} / {selectedFolder?.name}
                 </h2>
+                <Button onClick={() => openAddSubItemDialog(selectedFolderId)}>
+                  <Plus className="mr-2 h-4 w-4" />
+                  Add {selectedFolder?.type === "us" ? "User Story" : "CR/SR"}
+                </Button>
               </div>
 
               {filteredSubItems.length === 0 ? (
                 <div className="text-center text-muted-foreground py-12 border rounded-lg">
                   <FileText className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                  <p>{searchQuery ? "No matching items found" : "No User Stories or CRs yet"}</p>
-                  <p className="text-sm mt-2">Use the branch menu to add items</p>
+                  <p>{searchQuery ? "No matching items found" : `No ${selectedFolder?.type === "us" ? "User Stories" : "CRs/SRs"} yet`}</p>
+                  <Button className="mt-4" onClick={() => openAddSubItemDialog(selectedFolderId)}>
+                    <Plus className="mr-2 h-4 w-4" />
+                    Add {selectedFolder?.type === "us" ? "User Story" : "CR/SR"}
+                  </Button>
                 </div>
               ) : (
                 <div className="grid gap-3">
@@ -487,16 +607,12 @@ export default function TestCasesPage() {
                       onClick={() => setSelectedSubItemId(item.id)}
                     >
                       <div className="flex items-center gap-3">
-                        {item.type === "user-story" ? (
-                          <FileText className="h-5 w-5 text-blue-500" />
-                        ) : (
-                          <FolderOpen className="h-5 w-5 text-orange-500" />
-                        )}
+                        <FileText className="h-5 w-5 text-blue-500" />
                         <div className="flex-1">
                           <div className="flex items-center gap-2">
                             <span className="font-medium">{item.name}</span>
                             <Badge variant={item.type === "user-story" ? "default" : "secondary"}>
-                              {item.type === "user-story" ? "User Story" : "CR"}
+                              {item.type === "user-story" ? "User Story" : "CR/SR"}
                             </Badge>
                           </div>
                           {item.description && (
@@ -520,14 +636,10 @@ export default function TestCasesPage() {
                   </Button>
                   <div>
                     <div className="flex items-center gap-2">
-                      {selectedSubItem?.type === "user-story" ? (
-                        <FileText className="h-5 w-5 text-blue-500" />
-                      ) : (
-                        <FolderOpen className="h-5 w-5 text-orange-500" />
-                      )}
+                      <FileText className="h-5 w-5 text-blue-500" />
                       <h2 className="text-lg font-medium">{selectedSubItem?.name}</h2>
                       <Badge variant={selectedSubItem?.type === "user-story" ? "default" : "secondary"}>
-                        {selectedSubItem?.type === "user-story" ? "User Story" : "CR"}
+                        {selectedSubItem?.type === "user-story" ? "User Story" : "CR/SR"}
                       </Badge>
                     </div>
                     {selectedSubItem?.description && (
@@ -734,6 +846,25 @@ export default function TestCasesPage() {
         </DialogContent>
       </Dialog>
 
+      {/* Folder Dialog */}
+      <Dialog open={folderDialogOpen} onOpenChange={setFolderDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Folder</DialogTitle>
+          </DialogHeader>
+          <Input
+            placeholder="Folder name"
+            value={folderName}
+            onChange={e => setFolderName(e.target.value)}
+          />
+          <DialogFooter>
+            <Button onClick={saveFolder} disabled={!folderName.trim()}>
+              Save
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Sub-Item Dialog */}
       <Dialog open={subItemDialogOpen} onOpenChange={setSubItemDialogOpen}>
         <DialogContent>
@@ -831,6 +962,30 @@ export default function TestCasesPage() {
               onClick={() => {
                 if (deletingBranch) deleteBranch(deletingBranch.id)
                 setDeletingBranch(null)
+              }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Delete Folder Confirmation */}
+      <AlertDialog open={!!deletingFolder} onOpenChange={() => setDeletingFolder(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Folder</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete "{deletingFolder?.name}"? This will also delete all items and Test Cases under this folder.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (deletingFolder) deleteFolder(deletingFolder.id)
+                setDeletingFolder(null)
               }}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
