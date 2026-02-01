@@ -127,9 +127,10 @@ export default function TestCasesPage() {
   const [deletingSubItem, setDeletingSubItem] = useState<SubItem | null>(null)
   const [deletingTestCase, setDeletingTestCase] = useState<TestCase | null>(null)
 
-  // Expanded branches and folders state
+  // Expanded branches, folders, and test cases state
   const [expandedBranches, setExpandedBranches] = useState<Set<string>>(new Set())
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set())
+  const [expandedTestCases, setExpandedTestCases] = useState<Set<string>>(new Set())
 
   // Selected branch and folder data
   const selectedBranch = branches.find(b => b.id === selectedBranchId)
@@ -180,6 +181,19 @@ export default function TestCasesPage() {
         next.delete(folderId)
       } else {
         next.add(folderId)
+      }
+      return next
+    })
+  }
+
+  // Toggle test case expansion
+  const toggleTestCase = (testCaseId: string) => {
+    setExpandedTestCases(prev => {
+      const next = new Set(prev)
+      if (next.has(testCaseId)) {
+        next.delete(testCaseId)
+      } else {
+        next.add(testCaseId)
       }
       return next
     })
@@ -663,22 +677,39 @@ export default function TestCasesPage() {
                   </Button>
                 </div>
               ) : (
-                <div className="space-y-4">
-                  {subItemTestCases.map(tc => (
-                    <div key={tc.id} className="border rounded-lg">
-                      <div className="p-4 border-b bg-muted/30 flex items-center justify-between">
+                <div className="space-y-3">
+                  {subItemTestCases.map((tc, idx) => {
+                    const isExpanded = expandedTestCases.has(tc.id)
+                    return (
+                    <div key={tc.id} className="border rounded-lg overflow-hidden">
+                      {/* Collapsed Header - Always visible */}
+                      <div 
+                        className={cn(
+                          "p-4 flex items-center justify-between cursor-pointer hover:bg-muted/50 transition-colors",
+                          isExpanded && "border-b bg-muted/30"
+                        )}
+                        onClick={() => toggleTestCase(tc.id)}
+                      >
                         <div className="flex items-center gap-3">
-                          <span className="font-medium">{tc.name}</span>
+                          <button className="p-0.5">
+                            {isExpanded ? (
+                              <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                            ) : (
+                              <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                            )}
+                          </button>
+                          <span className="font-medium">Test {idx + 1} - {tc.name}</span>
                           <Badge
                             variant={
                               tc.status === "pass" ? "default" :
                               tc.status === "fail" ? "destructive" : "secondary"
                             }
+                            className={tc.status === "pass" ? "bg-green-600" : ""}
                           >
-                            {tc.status}
+                            {tc.status.charAt(0).toUpperCase() + tc.status.slice(1)}
                           </Badge>
                         </div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2" onClick={e => e.stopPropagation()}>
                           <Button variant="outline" size="sm" onClick={() => openEditTestCaseDialog(tc)}>
                             <Pencil className="mr-1 h-3 w-3" />
                             Edit
@@ -695,6 +726,8 @@ export default function TestCasesPage() {
                         </div>
                       </div>
 
+                      {/* Expanded Content */}
+                      {isExpanded && (
                       <div className="p-4 space-y-4">
                         {/* Steps Table */}
                         <div>
@@ -818,8 +851,9 @@ export default function TestCasesPage() {
                           />
                         </div>
                       </div>
+                      )}
                     </div>
-                  ))}
+                  )})}
                 </div>
               )}
             </div>
