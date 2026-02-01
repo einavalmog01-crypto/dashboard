@@ -1,8 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { Bell, Search, ChevronDown } from "lucide-react"
-import { Input } from "@/components/ui/input"
+import { Bell, ChevronDown } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { LogViewer } from "./log-viewer"
@@ -32,17 +31,8 @@ export function Header({ title, description }: HeaderProps) {
           )}
         </div>
 
-        {/* Right side: Search, Notification, Avatar, Env */}
+        {/* Right side: Notification, Avatar, Env */}
         <div className="flex items-center gap-4">
-          {/* Search */}
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              placeholder="Search tests..."
-              className="w-64 bg-secondary pl-9"
-            />
-          </div>
-
           {/* Notification */}
           <Button variant="ghost" size="icon" className="relative">
             <Bell className="h-5 w-5" />
