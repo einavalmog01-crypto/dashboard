@@ -166,6 +166,33 @@ function calculateAnalytics(reports: SanityReport[]): AnalyticsData {
   };
 }
 
+function filterReportsByTimeRange(reports: SanityReport[], timeRange: string): SanityReport[] {
+  const now = new Date().getTime()
+  let cutoffMs: number
+
+  switch (timeRange) {
+    case "24h":
+      cutoffMs = 24 * 60 * 60 * 1000 // 24 hours
+      break
+    case "7d":
+      cutoffMs = 7 * 24 * 60 * 60 * 1000 // 7 days
+      break
+    case "30d":
+      cutoffMs = 30 * 24 * 60 * 60 * 1000 // 30 days
+      break
+    case "90d":
+      cutoffMs = 90 * 24 * 60 * 60 * 1000 // 90 days
+      break
+    default:
+      cutoffMs = 7 * 24 * 60 * 60 * 1000 // default 7 days
+  }
+
+  return reports.filter(report => {
+    const reportTime = new Date(report.createdAt).getTime()
+    return now - reportTime <= cutoffMs
+  })
+}
+
 export default function AnalyticsPage() {
   const [timeRange, setTimeRange] = useState("7d");
   const [analytics, setAnalytics] = useState<AnalyticsData>({
@@ -179,9 +206,10 @@ export default function AnalyticsPage() {
 
   useEffect(() => {
     const raw = localStorage.getItem("sanityReports");
-    const reports: SanityReport[] = raw ? JSON.parse(raw) : [];
-    setAnalytics(calculateAnalytics(reports));
-  }, []);
+    const allReports: SanityReport[] = raw ? JSON.parse(raw) : [];
+    const filteredReports = filterReportsByTimeRange(allReports, timeRange);
+    setAnalytics(calculateAnalytics(filteredReports));
+  }, [timeRange]);
 
   return (
     <div className="flex flex-col gap-6 p-6">

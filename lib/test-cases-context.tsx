@@ -78,36 +78,53 @@ function slugify(value: string) {
     .replace(/(^-|-$)+/g, "")
 }
 
+// Helper function to load initial data from localStorage
+function loadInitialData(): { branches: Branch[]; subItems: SubItem[]; testCases: TestCase[] } {
+  if (typeof window === "undefined") {
+    return { branches: [], subItems: [], testCases: [] }
+  }
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY)
+    if (stored) {
+      const data = JSON.parse(stored)
+      return {
+        branches: data.branches || [],
+        subItems: data.subItems || [],
+        testCases: data.testCases || [],
+      }
+    }
+  } catch {
+    // Use defaults
+  }
+  return { branches: [], subItems: [], testCases: [] }
+}
+
 export function TestCasesProvider({ children }: { children: ReactNode }) {
+  const [isHydrated, setIsHydrated] = useState(false)
   const [branches, setBranches] = useState<Branch[]>([])
   const [subItems, setSubItems] = useState<SubItem[]>([])
   const [testCases, setTestCases] = useState<TestCase[]>([])
   const [selectedBranchId, setSelectedBranchId] = useState<string | null>(null)
   const [selectedSubItemId, setSelectedSubItemId] = useState<string | null>(null)
 
-  // Load from localStorage on mount
+  // Load from localStorage on mount (only once)
   useEffect(() => {
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY)
-      if (stored) {
-        const data = JSON.parse(stored)
-        setBranches(data.branches || [])
-        setSubItems(data.subItems || [])
-        setTestCases(data.testCases || [])
-      }
-    } catch {
-      // Use defaults
-    }
+    const data = loadInitialData()
+    setBranches(data.branches)
+    setSubItems(data.subItems)
+    setTestCases(data.testCases)
+    setIsHydrated(true)
   }, [])
 
-  // Save to localStorage whenever data changes
+  // Save to localStorage whenever data changes (only after initial hydration)
   useEffect(() => {
+    if (!isHydrated) return
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify({ branches, subItems, testCases }))
     } catch {
       // Ignore
     }
-  }, [branches, subItems, testCases])
+  }, [branches, subItems, testCases, isHydrated])
 
   // Branch functions
   const addBranch = (name: string) => {
