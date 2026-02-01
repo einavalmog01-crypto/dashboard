@@ -39,6 +39,16 @@ interface TestResult {
   timestamp: string
 }
 
+// Tests included in Basic Sanity
+const BASIC_SANITY_TESTS = [
+  "cable-submit-order",
+  "mobile-telesales-submit-order",
+  "mobile-retail-submit-order",
+  "dsl-submit-order",
+  "search-customer",
+  "legacy-search",
+]
+
 const initialTests: TestCase[] = [
   { 
     id: "cable-submit-order", 
@@ -81,6 +91,24 @@ const initialTests: TestCase[] = [
     name: "DSL Submit Order", 
     suite: "DSL", 
     description: "SubmitOrder + SetFNOrderStatus (CUSTOMER_CREATED + ORDER_COMPLETED) flow",
+    status: "idle", 
+    selected: false, 
+    comment: "" 
+  },
+  { 
+    id: "search-customer", 
+    name: "Search Customer", 
+    suite: "Customer", 
+    description: "Customer search functionality (Coming soon)",
+    status: "idle", 
+    selected: false, 
+    comment: "" 
+  },
+  { 
+    id: "legacy-search", 
+    name: "Legacy Search", 
+    suite: "Legacy", 
+    description: "Legacy search functionality (Coming soon)",
     status: "idle", 
     selected: false, 
     comment: "" 
@@ -137,6 +165,88 @@ export default function TestRunnerPage() {
   const selectedTests = tests.filter(t => t.selected)
   const passed = tests.filter(t => t.status === "passed").length
   const failed = tests.filter(t => t.status === "failed").length
+
+async function runBasicSanity() {
+  if (!currentEnvironmentConfig?.isConfigured) {
+    alert(`Environment ${selectedEnv} is not configured. Please go to Settings and configure the credentials.`)
+    return
+  }
+
+  setIsRunning(true)
+  setTestResults([])
+  const results: { name: string; status: "PASS" | "FAILED"; error: string; comment?: string }[] = []
+
+  // Get tests that are in the Basic Sanity list
+  const basicSanityTests = tests.filter(t => BASIC_SANITY_TESTS.includes(t.id))
+
+  for (const test of basicSanityTests) {
+    setTests(t => t.map(x => x.id === test.id ? { ...x, status: "running" } : x))
+
+    try {
+      const response = await fetch("/api/run/test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          testId: test.id,
+          testName: test.name,
+          environment: selectedEnv,
+          config: {
+            auth: currentEnvironmentConfig.auth,
+            db: currentEnvironmentConfig.db,
+            endpoint: currentEnvironmentConfig.endpoint,
+            unix: currentEnvironmentConfig.unix,
+          },
+          customTemplates: test.customTemplates,
+        }),
+      })
+
+      const data = await response.json()
+      const passed = data.success
+
+      setTests(t => t.map(x => x.id === test.id ? { ...x, status: passed ? "passed" : "failed" } : x))
+
+      setTestResults(prev => [...prev, {
+        testId: test.id,
+        testName: test.name,
+        environment: selectedEnv,
+        success: passed,
+        steps: data.steps || [],
+        error: data.error,
+        timestamp: new Date().toISOString(),
+      }])
+
+      results.push({
+        name: test.name,
+        status: passed ? "PASS" : "FAILED",
+        error: data.error || "",
+        comment: test.comment,
+      })
+    } catch (error) {
+      setTests(t => t.map(x => x.id === test.id ? { ...x, status: "failed" } : x))
+
+      setTestResults(prev => [...prev, {
+        testId: test.id,
+        testName: test.name,
+        environment: selectedEnv,
+        success: false,
+        steps: [],
+        error: error instanceof Error ? error.message : "Unknown error",
+        timestamp: new Date().toISOString(),
+      }])
+
+      results.push({
+        name: test.name,
+        status: "FAILED",
+        error: error instanceof Error ? error.message : "Unknown error",
+        comment: test.comment,
+      })
+    }
+  }
+
+  // Save as BASIC sanity report
+  saveSanityReport("BASIC", selectedEnv, results)
+  setIsRunning(false)
+}
 
 async function runSelected() {
   if (!currentEnvironmentConfig?.isConfigured) {
@@ -233,25 +343,35 @@ async function runSelected() {
 
 
   function scheduleSanity() {
-    const entry = `${scheduleType.toUpperCase()} Sanity on ${selectedEnv} — ${scheduleDate} ${scheduleTime} (${recurrence})`
-    setScheduledSanities(prev => [entry, ...prev])
-    setIsScheduleModalOpen(false)
-  }
-
-  function viewScheduledSanities() {
-    if (scheduledSanities.length === 0) {
-      alert("No scheduled sanities yet.")
+    if (!scheduleDate || !scheduleTime) {
+      alert("Please select date and time")
       return
     }
-
-    const testsForReport = scheduledSanities.map(s => ({
-      name: s,
-      status: "PASS" as const,
-      error: "",
-      comment: "",
-    }))
-
-    saveSanityReport("SCHEDULED", selectedEnv, testsForReport)
+    
+    const schedule = {
+      id: crypto.randomUUID(),
+      type: scheduleType,
+      environment: selectedEnv,
+      date: scheduleDate,
+      time: scheduleTime,
+      recurrence: recurrence,
+      createdAt: new Date().toISOString(),
+      isActive: true,
+    }
+    
+    // Save to localStorage
+    const existing = JSON.parse(localStorage.getItem("scheduledSanities") || "[]")
+    localStorage.setItem("scheduledSanities", JSON.stringify([schedule, ...existing]))
+    
+    setScheduledSanities(prev => [
+      `${scheduleType.toUpperCase()} Sanity on ${selectedEnv} — ${scheduleDate} ${scheduleTime} (${recurrence})`,
+      ...prev
+    ])
+    setIsScheduleModalOpen(false)
+    setScheduleDate("")
+    setScheduleTime("")
+    
+    alert(`Sanity scheduled for ${scheduleDate} at ${scheduleTime} (${recurrence})`)
   }
 
   function handleCommentChange(testId: string, value: string) {
@@ -477,23 +597,18 @@ async function runSelected() {
               <CardTitle>Quick Actions</CardTitle>
             </CardHeader>
             <CardContent className="flex flex-col gap-2">
-              <Button onClick={() => window.open(`/run/basic-sanity?env=${selectedEnv}`, "_blank")}>
-                Run Basic Sanity ({selectedEnv})
+              <Button 
+                onClick={runBasicSanity}
+                disabled={isRunning || !currentEnvironmentConfig?.isConfigured}
+                className="bg-blue-600 hover:bg-blue-700"
+              >
+                {isRunning ? "Running..." : `Run Basic Sanity (${selectedEnv})`}
               </Button>
-              <Button onClick={() => window.open(`/logs?env=${selectedEnv}`, "_blank")}>
-                View Logs ({selectedEnv})
-              </Button>
-              <Button onClick={() => setIsScheduleModalOpen(true)}>
+              <Button onClick={() => setIsScheduleModalOpen(true)} variant="outline">
                 Schedule Sanity
               </Button>
               <Button
-                onClick={viewScheduledSanities}
-                className="bg-gray-200 text-black hover:bg-gray-300"
-              >
-                View Scheduled Sanities
-              </Button>
-              <Button
-                className="bg-purple-600 text-white"
+                className="bg-purple-600 text-white hover:bg-purple-700"
                 onClick={() => window.open("/sanity-reports", "_blank")}
               >
                 Sanity Reports

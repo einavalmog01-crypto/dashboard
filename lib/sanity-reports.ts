@@ -1,7 +1,8 @@
 export type SanityType = "FULL" | "BASIC" | "SELECTED" | "SCHEDULED"
 
 export type SanityTestResult = {
-  testName: string
+  testName?: string
+  name?: string  // Alternative field name
   status: "PASS" | "FAILED"
   error?: string
   comment?: string

@@ -4,8 +4,11 @@ import Link from "next/link"
 import { Card, CardHeader, CardTitle } from "@/components/ui/card"
 import { getReports } from "@/lib/sanity-reports"
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
+import { FileSpreadsheet, FileJson, FileText, Eye, Trash2 } from "lucide-react"
 import jsPDF from "jspdf"
 import autoTable from "jspdf-autotable"
+import * as XLSX from "xlsx"
 
 export default function SanityReportsPage() {
   const reports = getReports()
@@ -17,8 +20,35 @@ export default function SanityReportsPage() {
     const url = URL.createObjectURL(blob)
     const a = document.createElement("a")
     a.href = url
-    a.download = `${report.type}_Sanity_${report.createdAt}.json`
+    a.download = `${report.type}_Sanity_${formatDateForFilename(report.createdAt)}.json`
     a.click()
+  }
+
+  function downloadExcel(report: any) {
+    // Create workbook and worksheet
+    const wb = XLSX.utils.book_new()
+    
+    // Prepare data for Excel
+    const data = report.tests.map((t: any) => ({
+      "Test Name": t.testName || t.name,
+      "Status": t.status,
+      "Comment": t.error || t.comment || "-"
+    }))
+    
+    const ws = XLSX.utils.json_to_sheet(data)
+    
+    // Set column widths
+    ws["!cols"] = [
+      { wch: 40 }, // Test Name
+      { wch: 10 }, // Status
+      { wch: 50 }, // Comment
+    ]
+    
+    XLSX.utils.book_append_sheet(wb, ws, "Sanity Report")
+    
+    // Generate filename with date/time
+    const filename = `${report.type}_Sanity_${formatDateForFilename(report.createdAt)}.xlsx`
+    XLSX.writeFile(wb, filename)
   }
 
   function downloadPDF(report: any) {
@@ -46,17 +76,36 @@ export default function SanityReportsPage() {
       styles: { cellPadding: 2, fontSize: 10 },
     })
 
-    doc.save(`${report.type}_Sanity_${report.createdAt}.pdf`)
+    doc.save(`${report.type}_Sanity_${formatDateForFilename(report.createdAt)}.pdf`)
+  }
+
+  function formatDateForFilename(dateStr: string) {
+    const d = new Date(dateStr)
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}_${String(d.getHours()).padStart(2, "0")}-${String(d.getMinutes()).padStart(2, "0")}-${String(d.getSeconds()).padStart(2, "0")}`
+  }
+
+  function deleteReport(reportId: string) {
+    if (!confirm("Are you sure you want to delete this report?")) return
+    const existing = JSON.parse(localStorage.getItem("sanityReports") || "[]")
+    const updated = existing.filter((r: any) => r.id !== reportId)
+    localStorage.setItem("sanityReports", JSON.stringify(updated))
+    window.location.reload()
   }
 
   return (
     <div className="p-6 space-y-6">
       <h1 className="text-2xl font-bold">Sanity Reports</h1>
+      <p className="text-muted-foreground">
+        View and download sanity test reports. Each report is named by date and time.
+      </p>
 
       {reports.length === 0 && (
-        <p className="text-muted-foreground">
-          No sanity reports yet
-        </p>
+        <div className="text-center py-12 border rounded-lg bg-muted/30">
+          <p className="text-muted-foreground">No sanity reports yet</p>
+          <p className="text-sm text-muted-foreground mt-2">
+            Run a Basic Sanity or selected tests to generate reports
+          </p>
+        </div>
       )}
 
       <div className="space-y-3">
@@ -65,54 +114,71 @@ export default function SanityReportsPage() {
                            report.type === "BASIC" ? "Basic Sanity" :
                            report.type === "SELECTED" ? "Selected Tests" : "Scheduled Sanity"
           const envLabel = report.environment || "Unknown"
-          const label = `${typeLabel} on ${envLabel} — ${new Date(report.createdAt).toLocaleString()}`
+          const dateStr = new Date(report.createdAt).toLocaleString()
+          const filename = `${typeLabel}_${formatDateForFilename(report.createdAt)}`
 
           const passed = report.tests.filter((t: any) => t.status === "PASS").length
           const failed = report.tests.filter((t: any) => t.status === "FAILED").length
+          const total = report.tests.length
 
-          const commentsPreview = report.tests
-            .filter((t: any) => t.error || t.comment)
-            .slice(0, 2)
-            .map((t: any) => `• ${t.testName || t.name}: ${t.error || t.comment}`)
-            .join("\n")
-          
           return (
-            <Card key={report.id} className="hover:bg-muted">
-              <CardHeader className="flex justify-between items-center">
-                <div>
-                  <CardTitle className="text-base">{label}</CardTitle>
-                  <div className="flex gap-2 mt-1">
+            <Card key={report.id} className="hover:bg-muted/50 transition-colors">
+              <CardHeader className="flex flex-row justify-between items-start gap-4">
+                <div className="flex-1">
+                  <CardTitle className="text-base font-semibold">{filename}</CardTitle>
+                  <p className="text-sm text-muted-foreground mt-1">{dateStr}</p>
+                  <div className="flex flex-wrap gap-2 mt-2">
                     <Badge variant="outline">{envLabel}</Badge>
-                    <Badge className="bg-green-600 text-black">PASS {passed}</Badge>
-                    <Badge className="bg-red-600 text-white">FAILED {failed}</Badge>
+                    <Badge variant="outline">{total} tests</Badge>
+                    <Badge className="bg-green-600 text-white">{passed} PASS</Badge>
+                    {failed > 0 && (
+                      <Badge className="bg-red-600 text-white">{failed} FAILED</Badge>
+                    )}
                   </div>
-                  {commentsPreview && (
-                    <pre className="whitespace-pre-wrap text-xs text-muted-foreground mt-1">
-                      {commentsPreview}
-                    </pre>
-                  )}
                 </div>
 
-                <div className="flex flex-col gap-1">
-                  <Link
-                    href={`/sanity-reports/${report.id}`}
-                    target="_blank"
-                    className="text-blue-600 hover:underline text-sm"
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => window.open(`/sanity-reports/${report.id}`, "_blank")}
                   >
+                    <Eye className="h-4 w-4 mr-1" />
                     View
-                  </Link>
-                  <button
-                    onClick={() => downloadJSON(report)}
-                    className="text-sm text-white bg-primary px-2 py-1 rounded hover:bg-primary/80"
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => downloadExcel(report)}
+                    className="text-green-600 border-green-600 hover:bg-green-50"
                   >
-                    JSON
-                  </button>
-                  <button
+                    <FileSpreadsheet className="h-4 w-4 mr-1" />
+                    Excel
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
                     onClick={() => downloadPDF(report)}
-                    className="text-sm text-white bg-green-600 px-2 py-1 rounded hover:bg-green-700"
                   >
+                    <FileText className="h-4 w-4 mr-1" />
                     PDF
-                  </button>
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => downloadJSON(report)}
+                  >
+                    <FileJson className="h-4 w-4 mr-1" />
+                    JSON
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => deleteReport(report.id)}
+                    className="text-destructive hover:text-destructive"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
                 </div>
               </CardHeader>
             </Card>
