@@ -570,13 +570,13 @@ async function runSelected() {
               <CardTitle>Controls</CardTitle>
             </CardHeader>
             <CardContent>
-              <Button
-                className="w-full bg-green-600 text-black"
-                disabled={isRunning || selectedTests.length === 0}
-                onClick={runSelected}
-              >
-                Run selected tests
-              </Button>
+            <Button
+              className="w-full bg-amber-700 text-white hover:bg-amber-800"
+              disabled={isRunning || selectedTests.length === 0}
+              onClick={runSelected}
+            >
+              Run selected tests
+            </Button>
             </CardContent>
           </Card>
 
@@ -610,7 +610,10 @@ async function runSelected() {
               >
                 View Logs ({selectedEnv})
               </Button>
-              <Button onClick={() => setIsScheduleModalOpen(true)} variant="outline">
+              <Button 
+                onClick={() => setIsScheduleModalOpen(true)} 
+                className="bg-yellow-500 text-black hover:bg-yellow-600"
+              >
                 Schedule Sanity
               </Button>
               <Button
