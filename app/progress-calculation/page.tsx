@@ -110,25 +110,24 @@ export default function ProgressCalculationPage() {
 
         <Button onClick={() => { setEditingStory(null); setIsModalOpen(true) }}>Create</Button>
 
-        {filterAssignee && (
-          <Button 
-            variant="outline" 
-            size="sm"
-            onClick={() => setFilterAssignee("")}
-          >
-            Clear Filter
-          </Button>
-        )}
-
-        {assignees.map(a => (
+        <div className="flex gap-1 items-center ml-2">
+          <span className="text-sm text-muted-foreground mr-1">Assignee:</span>
           <button
-            key={a}
-            onClick={() => setFilterAssignee(filterAssignee === a ? "" : a)}
-            className={`px-2 py-1 border rounded text-sm ${filterAssignee === a ? "bg-blue-500 text-white" : ""}`}
+            onClick={() => setFilterAssignee("")}
+            className={`px-2 py-1 border rounded text-sm ${filterAssignee === "" ? "bg-blue-500 text-white" : ""}`}
           >
-            {a}
+            All
           </button>
-        ))}
+          {assignees.map(a => (
+            <button
+              key={a}
+              onClick={() => setFilterAssignee(a)}
+              className={`px-2 py-1 border rounded text-sm ${filterAssignee === a ? "bg-blue-500 text-white" : ""}`}
+            >
+              {a}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Kanban Board */}
