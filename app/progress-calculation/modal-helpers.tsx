@@ -15,6 +15,7 @@ export type Status =
   | "ON HOLD"
   | "SST TESTING"
   | "DONE"
+  | "CANCELLED"
 
 export interface Attachment {
   name: string
@@ -50,6 +51,17 @@ export const STATUSES: Status[] = [
   "ON HOLD",
   "SST TESTING",
   "DONE",
+  "CANCELLED",
+]
+
+// Columns for the Kanban board (CANCELLED items show in DONE column)
+export const KANBAN_COLUMNS: Status[] = [
+  "TO DO",
+  "IN PROGRESS",
+  "BLOCKED",
+  "ON HOLD",
+  "SST TESTING",
+  "DONE",
 ]
 
 export const STATUS_COLORS: Record<Status, string> = {
@@ -59,6 +71,7 @@ export const STATUS_COLORS: Record<Status, string> = {
   "ON HOLD": "bg-yellow-200 text-yellow-900",
   "SST TESTING": "bg-purple-200 text-purple-900",
   "DONE": "bg-green-200 text-green-900",
+  "CANCELLED": "bg-gray-400 text-gray-900 line-through",
 }
 
 /* ================= MODAL COMPONENT ================= */
