@@ -28,23 +28,29 @@ interface TestRunRequest {
       password: string
     }
   }
+  customTemplates?: {
+    [stepName: string]: string
+  }
 }
 
 export async function POST(request: Request) {
   try {
     const body: TestRunRequest = await request.json()
-    const { testId, testName, environment, config } = body
+    const { testId, testName, environment, config, customTemplates } = body
 
     console.log(`[TestRunner] Running test: ${testName} (${testId}) on ${environment}`)
     console.log(`[TestRunner] Endpoint: ${config.endpoint.host}`)
     console.log(`[TestRunner] DB: ${config.db.hostname}:${config.db.port}`)
+    if (customTemplates) {
+      console.log(`[TestRunner] Using custom templates for steps: ${Object.keys(customTemplates).join(", ")}`)
+    }
 
     // Route to the appropriate test handler
     switch (testId) {
       case "cable-retail-submit-order":
-        return await runCableSubmitOrder(config, environment, "Retail")
+        return await runCableSubmitOrder(config, environment, "Retail", customTemplates)
       case "cable-telesales-submit-order":
-        return await runCableSubmitOrder(config, environment, "Telesales")
+        return await runCableSubmitOrder(config, environment, "Telesales", customTemplates)
       default:
         // For other tests, simulate execution
         return await runGenericTest(testId, testName, config)
@@ -61,7 +67,8 @@ export async function POST(request: Request) {
 async function runCableSubmitOrder(
   config: TestRunRequest["config"],
   environment: string,
-  channel: "Retail" | "Telesales"
+  channel: "Retail" | "Telesales",
+  customTemplates?: { [stepName: string]: string }
 ) {
   const { auth, db, endpoint } = config
 
@@ -75,7 +82,15 @@ async function runCableSubmitOrder(
     // STEP 1: SubmitOrder (GenerateContract)
     console.log(`[Cable${channel}SubmitOrder] Step 1: SubmitOrder (GenerateContract)`)
     
-    const submitOrderXml = buildSubmitOrderXml(orderId, "GenerateContract")
+    // Use custom template if provided, otherwise use default
+    let submitOrderXml: string
+    if (customTemplates?.["SubmitOrder (GenerateContract)"]) {
+      submitOrderXml = customTemplates["SubmitOrder (GenerateContract)"]
+        .replace(/\{\{ORDER_ID\}\}/g, orderId)
+        .replace(/\{\{OGW_ORDER_ID\}\}/g, "")
+    } else {
+      submitOrderXml = buildSubmitOrderXml(orderId, "GenerateContract")
+    }
     const generateContractUrl = `${endpoint.host}/VFDESubmitOrderEG/VFDE`
     
     const generateContractResponse = await fetch(
@@ -132,7 +147,15 @@ async function runCableSubmitOrder(
     // STEP 2: SubmitOrder (Fulfillment)
     console.log(`[Cable${channel}SubmitOrder] Step 2: SubmitOrder (Fulfillment)`)
     
-    const fulfillmentXml = buildSubmitOrderXml(orderId, "Fulfillment", ogwOrderId)
+    // Use custom template if provided, otherwise use default
+    let fulfillmentXml: string
+    if (customTemplates?.["SubmitOrder (Fulfillment)"]) {
+      fulfillmentXml = customTemplates["SubmitOrder (Fulfillment)"]
+        .replace(/\{\{ORDER_ID\}\}/g, orderId)
+        .replace(/\{\{OGW_ORDER_ID\}\}/g, ogwOrderId)
+    } else {
+      fulfillmentXml = buildSubmitOrderXml(orderId, "Fulfillment", ogwOrderId)
+    }
     const fulfillmentUrl = `${endpoint.host}/VFDESubmitOrderEG/VFDE`
     
     const fulfillmentResponse = await fetch(
@@ -173,7 +196,15 @@ async function runCableSubmitOrder(
     // STEP 3: SetOrderStatus
     console.log(`[Cable${channel}SubmitOrder] Step 3: SetOrderStatus`)
     
-    const setOrderStatusXml = buildSetOrderStatusXml(ogwOrderId)
+    // Use custom template if provided, otherwise use default
+    let setOrderStatusXml: string
+    if (customTemplates?.["SetOrderStatus"]) {
+      setOrderStatusXml = customTemplates["SetOrderStatus"]
+        .replace(/\{\{ORDER_ID\}\}/g, orderId)
+        .replace(/\{\{OGW_ORDER_ID\}\}/g, ogwOrderId)
+    } else {
+      setOrderStatusXml = buildSetOrderStatusXml(ogwOrderId)
+    }
     const setOrderStatusUrl = `${endpoint.host}/VFDESetOrderStatusEG/VFDE`
     
     const setOrderStatusResponse = await fetch(
