@@ -49,9 +49,56 @@ const initialTests: TestCase[] = [
     selected: false, 
     comment: "" 
   },
+  { 
+    id: "mobile-telesales-submit-order", 
+    name: "Mobile Telesales Submit Order", 
+    suite: "Mobile", 
+    description: "SubmitOrder + FRIDA processing + SetOrderStatus_EAI + OMSendDocumentCallback + HWFulfilmentReady flow",
+    status: "idle", 
+    selected: false, 
+    comment: "" 
+  },
+  { 
+    id: "mobile-retail-submit-order", 
+    name: "Mobile Retail Submit Order", 
+    suite: "Mobile", 
+    description: "SubmitOrder + SetOrderStatus_EAI + IMPORTED_IN_VORAS + VORAS_FINAL_SUCCESS_HANDOUT flow",
+    status: "idle", 
+    selected: false, 
+    comment: "" 
+  },
+  { 
+    id: "get-order", 
+    name: "GetOrder", 
+    suite: "Order", 
+    description: "SubmitOrder + SetOrderStatus_EAI + GetOrder flow",
+    status: "idle", 
+    selected: false, 
+    comment: "" 
+  },
+  { 
+    id: "dsl-submit-order", 
+    name: "DSL Submit Order", 
+    suite: "DSL", 
+    description: "SubmitOrder + SetFNOrderStatus (CUSTOMER_CREATED + ORDER_COMPLETED) flow",
+    status: "idle", 
+    selected: false, 
+    comment: "" 
+  },
   { id: "1", name: "User Login", suite: "Auth", status: "idle", selected: true, comment: "" },
   { id: "2", name: "Checkout Flow", suite: "E-Commerce", status: "idle", selected: true, comment: "" },
 ]
+
+// Default FRIDA evidence JSON template
+const DEFAULT_FRIDA_EVIDENCE = `[
+    {
+        "orderNumber":"{{OGW_ORDER_ID}}.{{ORDER_LINE_ID}}",
+        "naiveScore": 2,
+        "fraudLevel": "Kein Betrug",
+        "fraudAction": "Freigeben",
+        "checkDate": "{{TIMESTAMP}}"
+    }
+]`
 
 function saveSanityReport(
   type: "FULL" | "BASIC" | "SELECTED" | "SCHEDULED",
@@ -217,13 +264,11 @@ async function runSelected() {
 
   function openConfigureModal(testId: string) {
     const test = tests.find(t => t.id === testId)
-    // Load default templates for Cable tests
-    if (testId.includes("cable")) {
-      const orderId = "{{ORDER_ID}}"
-      const ogwOrderId = "{{OGW_ORDER_ID}}"
-      setEditingTemplates({
-        "SubmitOrder (GenerateContract)": test?.customTemplates?.["SubmitOrder (GenerateContract)"] || 
-          `<?xml version="1.0" encoding="UTF-8"?>
+    const orderId = "{{ORDER_ID}}"
+    const ogwOrderId = "{{OGW_ORDER_ID}}"
+    const orderLineId = "{{ORDER_LINE_ID}}"
+    
+    const defaultSubmitOrderGC = `<?xml version="1.0" encoding="UTF-8"?>
 <soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:vfde="http://vfde.amdocs.com/">
   <soapenv:Header/>
   <soapenv:Body>
@@ -233,9 +278,9 @@ async function runSelected() {
       <OGWOrderID></OGWOrderID>
     </vfde:SubmitOrder>
   </soapenv:Body>
-</soapenv:Envelope>`,
-        "SubmitOrder (Fulfillment)": test?.customTemplates?.["SubmitOrder (Fulfillment)"] ||
-          `<?xml version="1.0" encoding="UTF-8"?>
+</soapenv:Envelope>`
+
+    const defaultSubmitOrderFulfillment = `<?xml version="1.0" encoding="UTF-8"?>
 <soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:vfde="http://vfde.amdocs.com/">
   <soapenv:Header/>
   <soapenv:Body>
@@ -245,15 +290,79 @@ async function runSelected() {
       <OGWOrderID>${ogwOrderId}</OGWOrderID>
     </vfde:SubmitOrder>
   </soapenv:Body>
-</soapenv:Envelope>`,
-        "SetOrderStatus": test?.customTemplates?.["SetOrderStatus"] ||
-          `<?xml version="1.0" encoding="UTF-8"?>
+</soapenv:Envelope>`
+
+    const defaultSetOrderStatus = `<?xml version="1.0" encoding="UTF-8"?>
 <soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:vfde="http://vfde.amdocs.com/">
   <soapenv:Header/>
   <soapenv:Body>
     <vfde:SetOrderStatus>
       <OGWSubOrderId>${ogwOrderId}</OGWSubOrderId>
+      <OGWSubscriberId>${orderLineId}</OGWSubscriberId>
     </vfde:SetOrderStatus>
+  </soapenv:Body>
+</soapenv:Envelope>`
+
+    if (testId === "cable-submit-order") {
+      setEditingTemplates({
+        "SubmitOrder (GenerateContract)": test?.customTemplates?.["SubmitOrder (GenerateContract)"] || defaultSubmitOrderGC,
+        "SubmitOrder (Fulfillment)": test?.customTemplates?.["SubmitOrder (Fulfillment)"] || defaultSubmitOrderFulfillment,
+        "SetOrderStatus": test?.customTemplates?.["SetOrderStatus"] || defaultSetOrderStatus,
+      })
+    } else if (testId === "mobile-telesales-submit-order") {
+      setEditingTemplates({
+        "SubmitOrder (GenerateContract)": test?.customTemplates?.["SubmitOrder (GenerateContract)"] || defaultSubmitOrderGC,
+        "SubmitOrder (Fulfillment)": test?.customTemplates?.["SubmitOrder (Fulfillment)"] || defaultSubmitOrderFulfillment,
+        "FRIDA Evidence JSON": test?.customTemplates?.["FRIDA Evidence JSON"] || DEFAULT_FRIDA_EVIDENCE,
+        "SetOrderStatus_EAI": test?.customTemplates?.["SetOrderStatus_EAI"] || defaultSetOrderStatus,
+        "OMSendDocumentCallback": test?.customTemplates?.["OMSendDocumentCallback"] || `<?xml version="1.0" encoding="UTF-8"?>
+<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:vfde="http://vfde.amdocs.com/">
+  <soapenv:Header/>
+  <soapenv:Body>
+    <vfde:sendDocumentResponse>
+      <auftragId>{{AUFTRAG_ID}}</auftragId>
+      <externeId>${ogwOrderId}|${orderLineId}|P</externeId>
+    </vfde:sendDocumentResponse>
+  </soapenv:Body>
+</soapenv:Envelope>`,
+        "HWFulfilmentReady": test?.customTemplates?.["HWFulfilmentReady"] || defaultSetOrderStatus,
+      })
+    } else if (testId === "mobile-retail-submit-order") {
+      setEditingTemplates({
+        "SubmitOrder (GenerateContract)": test?.customTemplates?.["SubmitOrder (GenerateContract)"] || defaultSubmitOrderGC,
+        "SubmitOrder (Fulfillment)": test?.customTemplates?.["SubmitOrder (Fulfillment)"] || defaultSubmitOrderFulfillment,
+        "SetOrderStatus_EAI": test?.customTemplates?.["SetOrderStatus_EAI"] || defaultSetOrderStatus,
+        "IMPORTED_IN_VORAS": test?.customTemplates?.["IMPORTED_IN_VORAS"] || defaultSetOrderStatus,
+        "VORAS_FINAL_SUCCESS_HANDOUT": test?.customTemplates?.["VORAS_FINAL_SUCCESS_HANDOUT"] || defaultSetOrderStatus,
+      })
+    } else if (testId === "get-order") {
+      setEditingTemplates({
+        "SubmitOrder (GenerateContract)": test?.customTemplates?.["SubmitOrder (GenerateContract)"] || defaultSubmitOrderGC,
+        "SubmitOrder (Fulfillment)": test?.customTemplates?.["SubmitOrder (Fulfillment)"] || defaultSubmitOrderFulfillment,
+        "SetOrderStatus_EAI": test?.customTemplates?.["SetOrderStatus_EAI"] || defaultSetOrderStatus,
+        "GetOrder": test?.customTemplates?.["GetOrder"] || `<?xml version="1.0" encoding="UTF-8"?>
+<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:vfde="http://vfde.amdocs.com/">
+  <soapenv:Header/>
+  <soapenv:Body>
+    <vfde:GetOrder>
+      <OGWOrderId>${ogwOrderId}</OGWOrderId>
+    </vfde:GetOrder>
+  </soapenv:Body>
+</soapenv:Envelope>`,
+      })
+    } else if (testId === "dsl-submit-order") {
+      setEditingTemplates({
+        "SubmitOrder (GenerateContract)": test?.customTemplates?.["SubmitOrder (GenerateContract)"] || defaultSubmitOrderGC,
+        "SubmitOrder (Fulfillment)": test?.customTemplates?.["SubmitOrder (Fulfillment)"] || defaultSubmitOrderFulfillment,
+        "SetFNOrderStatus": test?.customTemplates?.["SetFNOrderStatus"] || `<?xml version="1.0" encoding="UTF-8"?>
+<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:ogw="http://ogw.amdocs.com/">
+  <soapenv:Header/>
+  <soapenv:Body>
+    <ogw:SetFNOrderStatus>
+      <ogw:orderId>{{BAR_CODE}}</ogw:orderId>
+      <ogw:barcode>{{BAR_CODE}}</ogw:barcode>
+      <ogw:status>{{STATUS}}</ogw:status>
+    </ogw:SetFNOrderStatus>
   </soapenv:Body>
 </soapenv:Envelope>`,
       })
@@ -316,7 +425,7 @@ async function runSelected() {
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
-                      {t.id.includes("cable") && (
+                      {(t.id.includes("cable") || t.id.includes("mobile") || t.id === "get-order" || t.id === "dsl-submit-order") && (
                         <Button
                           variant="ghost"
                           size="icon"
