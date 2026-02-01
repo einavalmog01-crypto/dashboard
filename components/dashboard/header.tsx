@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { LogViewer } from "./log-viewer" // optional: keep only if modal needed
-import type { EnvironmentConfig } from "@/lib/environment-config"
+import type { EnvironmentConfig, Environment } from "@/lib/environment-config"
 import { useEnvironment } from "@/lib/environment-context"
 
 interface HeaderProps {
@@ -94,7 +94,7 @@ export function Header({ title, description, environmentConfig }: HeaderProps) {
         <LogViewer
           isOpen={isLogViewerOpen}
           onClose={() => setIsLogViewerOpen(false)}
-          environment={selectedEnv}
+          environment={selectedEnv as Environment}
           environmentConfig={environmentConfig}
         />
       )}

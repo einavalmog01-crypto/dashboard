@@ -64,7 +64,44 @@ export default function TestCasesPage() {
         </Button>
       </div>
 
-      
+      <div className="space-y-2">
+        {sortedBranches.map((branch) => (
+          <div
+            key={branch.id}
+            className="flex items-center justify-between p-4 border rounded-lg"
+          >
+            <Link
+              href={`/test-cases/${branch.slug}`}
+              className="font-medium hover:underline"
+            >
+              {branch.name}
+            </Link>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon">
+                  <MoreVertical className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem
+                  onClick={() => {
+                    setEditingBranch(branch);
+                    setDialogOpen(true);
+                  }}
+                >
+                  Edit
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  className="text-destructive"
+                  onClick={() => setDeletingBranch(branch)}
+                >
+                  Delete
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        ))}
+      </div>
 
       <BranchDialog
         open={dialogOpen}

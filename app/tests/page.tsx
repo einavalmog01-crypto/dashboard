@@ -40,7 +40,6 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useSearchParams } from "next/navigation";
 import { Suspense } from "react";
-import Loading from "./loading";
 import {
   Plus,
   Search,

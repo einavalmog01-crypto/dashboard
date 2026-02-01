@@ -80,7 +80,7 @@ export function StoryModal({
       branch: "",
       description: "",
       assignee: "",
-      attachments: "",
+      attachments: [],
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       comments: [],
@@ -172,16 +172,19 @@ export function StoryModal({
               <label className="text-sm">Attachments</label>
               <Input
                 type="file"
-                onChange={e =>
-                  setForm({
-                    ...form,
-                    attachments: e.target.files?.[0]?.name ?? "",
-                  })
-                }
+                onChange={e => {
+                  const file = e.target.files?.[0]
+                  if (file) {
+                    setForm({
+                      ...form,
+                      attachments: [...form.attachments, { name: file.name, url: URL.createObjectURL(file) }],
+                    })
+                  }
+                }}
               />
-              {form.attachments && (
+              {form.attachments.length > 0 && (
                 <span className="text-xs text-muted-foreground">
-                  Attached: {form.attachments}
+                  Attached: {form.attachments.map(a => a.name).join(", ")}
                 </span>
               )}
             </div>
