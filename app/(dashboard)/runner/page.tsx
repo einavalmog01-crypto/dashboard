@@ -89,7 +89,7 @@ const initialTests: TestCase[] = [
   },
   { 
     id: "dsl-submit-order", 
-    name: "DSL Submit Order", 
+    name: "DSL_ILS Submit Order", 
     suite: "DSL", 
     description: "SubmitOrder + SetFNOrderStatus (CUSTOMER_CREATED + ORDER_COMPLETED) flow",
     status: "idle", 
@@ -98,9 +98,9 @@ const initialTests: TestCase[] = [
   },
   { 
     id: "search-customer", 
-    name: "Search Customer", 
+    name: "Customer Search", 
     suite: "Customer", 
-    description: "Customer search functionality (Coming soon)",
+    description: "CustomerSearch SOAP request with random CustomerID, validates ErrorCode OGWERR-0000 and SUCCESS response",
     status: "idle", 
     selected: false, 
     comment: "" 
@@ -109,7 +109,7 @@ const initialTests: TestCase[] = [
     id: "legacy-search", 
     name: "Legacy Search", 
     suite: "Legacy", 
-    description: "Legacy search functionality (Coming soon)",
+    description: "LegacySearch SOAP request with random CustomerID, validates ErrorCode OGWERR-0000 and SUCCESS response",
     status: "idle", 
     selected: false, 
     comment: "" 
@@ -485,6 +485,30 @@ async function runSelected() {
   </soapenv:Body>
 </soapenv:Envelope>`,
       })
+    } else if (testId === "search-customer") {
+      setEditingTemplates({
+        "CustomerSearch": test?.customTemplates?.["CustomerSearch"] || `<?xml version="1.0" encoding="UTF-8"?>
+<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:vfde="http://vfde.amdocs.com/">
+  <soapenv:Header/>
+  <soapenv:Body>
+    <vfde:CustomerSearch>
+      <CustomerID>{{CUSTOMER_ID}}</CustomerID>
+    </vfde:CustomerSearch>
+  </soapenv:Body>
+</soapenv:Envelope>`,
+      })
+    } else if (testId === "legacy-search") {
+      setEditingTemplates({
+        "LegacySearch": test?.customTemplates?.["LegacySearch"] || `<?xml version="1.0" encoding="UTF-8"?>
+<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:vfde="http://vfde.amdocs.com/">
+  <soapenv:Header/>
+  <soapenv:Body>
+    <vfde:LegacySearch>
+      <CustomerID>{{CUSTOMER_ID}}</CustomerID>
+    </vfde:LegacySearch>
+  </soapenv:Body>
+</soapenv:Envelope>`,
+      })
     }
     setConfigureTestId(testId)
   }
@@ -544,7 +568,7 @@ async function runSelected() {
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
-                      {(t.id.includes("cable") || t.id.includes("mobile") || t.id === "get-order" || t.id === "dsl-submit-order") && (
+                      {(t.id.includes("cable") || t.id.includes("mobile") || t.id === "get-order" || t.id === "dsl-submit-order" || t.id === "search-customer" || t.id === "legacy-search") && (
                         <Button
                           variant="ghost"
                           size="icon"

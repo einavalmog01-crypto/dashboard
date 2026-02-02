@@ -57,6 +57,10 @@ export async function POST(request: Request) {
         return await runGetOrder(config, environment, customTemplates)
       case "dsl-submit-order":
         return await runDSLSubmitOrder(config, environment, customTemplates)
+      case "search-customer":
+        return await runCustomerSearch(config, environment, customTemplates)
+      case "legacy-search":
+        return await runLegacySearch(config, environment, customTemplates)
       default:
         // For other tests, simulate execution
         return await runGenericTest(testId, testName, config)
@@ -1762,6 +1766,268 @@ function buildSetFNOrderStatusXml(barCode: string, status: string): string {
       <ogw:barcode>${barCode}</ogw:barcode>
       <ogw:status>${status}</ogw:status>
     </ogw:SetFNOrderStatus>
+  </soapenv:Body>
+</soapenv:Envelope>`
+}
+
+/**
+ * Customer Search flow
+ * Generates a random CustomerID, sends CustomerSearch SOAP request,
+ * validates ErrorCode = OGWERR-0000 and ErrorDescription = SUCCESS
+ */
+async function runCustomerSearch(
+  config: TestRunRequest["config"],
+  environment: string,
+  customTemplates?: { [stepName: string]: string }
+) {
+  const { auth, endpoint } = config
+  
+  // Generate random CustomerID (9 digits)
+  const customerId = Math.floor(100000000 + Math.random() * 900000000).toString()
+  console.log(`[CustomerSearch] Generated CustomerID: ${customerId}`)
+
+  const steps: { name: string; status: "PASS" | "FAILED"; message: string; request?: string; response?: string }[] = []
+
+  try {
+    // Build CustomerSearch request
+    let customerSearchXml: string
+    if (customTemplates?.["CustomerSearch"]) {
+      customerSearchXml = customTemplates["CustomerSearch"]
+        .replace(/\{\{CUSTOMER_ID\}\}/g, customerId)
+    } else {
+      customerSearchXml = buildCustomerSearchXml(customerId)
+    }
+
+    const customerSearchUrl = `${endpoint.host}/VFDECustomerSearchEG/VFDE`
+    
+    console.log(`[CustomerSearch] Sending request to: ${customerSearchUrl}`)
+    
+    const response = await fetch(customerSearchUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "text/xml;charset=UTF-8",
+        "SOAPAction": "CustomerSearch",
+        "Authorization": "Basic " + btoa(`${auth.username}:${auth.password}`),
+      },
+      body: customerSearchXml,
+    })
+
+    const responseText = await response.text()
+
+    // Check for SOAP fault
+    if (responseText.includes("<faultstring>")) {
+      const faultMatch = responseText.match(/<faultstring>(.*?)<\/faultstring>/)
+      steps.push({
+        name: "CustomerSearch",
+        status: "FAILED",
+        message: `SOAP Fault: ${faultMatch?.[1] || "Unknown"}`,
+        request: `POST ${customerSearchUrl}\n\n${customerSearchXml}`,
+        response: responseText
+      })
+      throw new Error(`CustomerSearch SOAP Fault: ${faultMatch?.[1] || "Unknown"}`)
+    }
+
+    // Extract ErrorCode and ErrorDescription
+    const errorCodeMatch = responseText.match(/<ErrorCode>(.*?)<\/ErrorCode>/)
+    const errorDescMatch = responseText.match(/<ErrorDescription>(.*?)<\/ErrorDescription>/)
+    
+    const errorCode = errorCodeMatch?.[1] || ""
+    const errorDesc = errorDescMatch?.[1] || ""
+
+    console.log(`[CustomerSearch] ErrorCode: ${errorCode}, ErrorDescription: ${errorDesc}`)
+
+    // Validate ErrorCode = OGWERR-0000
+    if (errorCode !== "OGWERR-0000") {
+      steps.push({
+        name: "CustomerSearch",
+        status: "FAILED",
+        message: `Unexpected ErrorCode: ${errorCode}`,
+        request: `POST ${customerSearchUrl}\n\n${customerSearchXml}`,
+        response: responseText
+      })
+      throw new Error(`Unexpected ErrorCode: ${errorCode}`)
+    }
+
+    // Validate ErrorDescription = SUCCESS
+    if (errorDesc !== "SUCCESS") {
+      steps.push({
+        name: "CustomerSearch",
+        status: "FAILED",
+        message: `Unexpected ErrorDescription: ${errorDesc}`,
+        request: `POST ${customerSearchUrl}\n\n${customerSearchXml}`,
+        response: responseText
+      })
+      throw new Error(`Unexpected ErrorDescription: ${errorDesc}`)
+    }
+
+    steps.push({
+      name: "CustomerSearch",
+      status: "PASS",
+      message: `CustomerSearch completed successfully. CustomerID: ${customerId}, ErrorCode: ${errorCode}, ErrorDescription: ${errorDesc}`,
+      request: `POST ${customerSearchUrl}\n\n${customerSearchXml}`,
+      response: responseText
+    })
+
+    console.log(`[CustomerSearch] Completed successfully for CustomerID: ${customerId}`)
+
+    return NextResponse.json({
+      success: true,
+      customerId,
+      steps,
+      message: `CustomerSearch completed successfully. CustomerID: ${customerId}`,
+    })
+
+  } catch (error) {
+    console.error(`[CustomerSearch] Error:`, error)
+    return NextResponse.json({
+      success: false,
+      customerId,
+      steps,
+      error: error instanceof Error ? error.message : "Unknown error",
+    })
+  }
+}
+
+function buildCustomerSearchXml(customerId: string): string {
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:vfde="http://vfde.amdocs.com/">
+  <soapenv:Header/>
+  <soapenv:Body>
+    <vfde:CustomerSearch>
+      <CustomerID>${customerId}</CustomerID>
+    </vfde:CustomerSearch>
+  </soapenv:Body>
+</soapenv:Envelope>`
+}
+
+/**
+ * Legacy Search flow
+ * Generates a random CustomerID, sends LegacySearch SOAP request,
+ * validates ErrorCode = OGWERR-0000 and ErrorDescription = SUCCESS
+ */
+async function runLegacySearch(
+  config: TestRunRequest["config"],
+  environment: string,
+  customTemplates?: { [stepName: string]: string }
+) {
+  const { auth, endpoint } = config
+  
+  // Generate random CustomerID (9 digits)
+  const customerId = Math.floor(100000000 + Math.random() * 900000000).toString()
+  console.log(`[LegacySearch] Generated CustomerID: ${customerId}`)
+
+  const steps: { name: string; status: "PASS" | "FAILED"; message: string; request?: string; response?: string }[] = []
+
+  try {
+    // Build LegacySearch request
+    let legacySearchXml: string
+    if (customTemplates?.["LegacySearch"]) {
+      legacySearchXml = customTemplates["LegacySearch"]
+        .replace(/\{\{CUSTOMER_ID\}\}/g, customerId)
+    } else {
+      legacySearchXml = buildLegacySearchXml(customerId)
+    }
+
+    // LegacySearch uses port 16500 (HTTP) instead of 16501 (HTTPS)
+    const hostWithoutPort = endpoint.host.replace(/:\d+$/, "").replace(/^https?:\/\//, "")
+    const legacySearchUrl = `http://${hostWithoutPort}:16500/VFDELegacySearchEG/VFDE`
+    
+    console.log(`[LegacySearch] Sending request to: ${legacySearchUrl}`)
+    
+    const response = await fetch(legacySearchUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "text/xml;charset=UTF-8",
+        "SOAPAction": "LegacySearch",
+        "Authorization": "Basic " + btoa(`${auth.username}:${auth.password}`),
+      },
+      body: legacySearchXml,
+    })
+
+    const responseText = await response.text()
+
+    // Check for SOAP fault
+    if (responseText.includes("<faultstring>")) {
+      const faultMatch = responseText.match(/<faultstring>(.*?)<\/faultstring>/)
+      steps.push({
+        name: "LegacySearch",
+        status: "FAILED",
+        message: `SOAP Fault: ${faultMatch?.[1] || "Unknown"}`,
+        request: `POST ${legacySearchUrl}\n\n${legacySearchXml}`,
+        response: responseText
+      })
+      throw new Error(`LegacySearch SOAP Fault: ${faultMatch?.[1] || "Unknown"}`)
+    }
+
+    // Extract ErrorCode and ErrorDescription
+    const errorCodeMatch = responseText.match(/<ErrorCode>(.*?)<\/ErrorCode>/)
+    const errorDescMatch = responseText.match(/<ErrorDescription>(.*?)<\/ErrorDescription>/)
+    
+    const errorCode = errorCodeMatch?.[1] || ""
+    const errorDesc = errorDescMatch?.[1] || ""
+
+    console.log(`[LegacySearch] ErrorCode: ${errorCode}, ErrorDescription: ${errorDesc}`)
+
+    // Validate ErrorCode = OGWERR-0000
+    if (errorCode !== "OGWERR-0000") {
+      steps.push({
+        name: "LegacySearch",
+        status: "FAILED",
+        message: `Unexpected ErrorCode: ${errorCode}`,
+        request: `POST ${legacySearchUrl}\n\n${legacySearchXml}`,
+        response: responseText
+      })
+      throw new Error(`Unexpected ErrorCode: ${errorCode}`)
+    }
+
+    // Validate ErrorDescription = SUCCESS
+    if (errorDesc !== "SUCCESS") {
+      steps.push({
+        name: "LegacySearch",
+        status: "FAILED",
+        message: `Unexpected ErrorDescription: ${errorDesc}`,
+        request: `POST ${legacySearchUrl}\n\n${legacySearchXml}`,
+        response: responseText
+      })
+      throw new Error(`Unexpected ErrorDescription: ${errorDesc}`)
+    }
+
+    steps.push({
+      name: "LegacySearch",
+      status: "PASS",
+      message: `LegacySearch completed successfully. CustomerID: ${customerId}, ErrorCode: ${errorCode}, ErrorDescription: ${errorDesc}`,
+      request: `POST ${legacySearchUrl}\n\n${legacySearchXml}`,
+      response: responseText
+    })
+
+    console.log(`[LegacySearch] Completed successfully for CustomerID: ${customerId}`)
+
+    return NextResponse.json({
+      success: true,
+      customerId,
+      steps,
+      message: `LegacySearch completed successfully. CustomerID: ${customerId}`,
+    })
+
+  } catch (error) {
+    console.error(`[LegacySearch] Error:`, error)
+    return NextResponse.json({
+      success: false,
+      customerId,
+      steps,
+      error: error instanceof Error ? error.message : "Unknown error",
+    })
+  }
+}
+
+function buildLegacySearchXml(customerId: string): string {
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:vfde="http://vfde.amdocs.com/">
+  <soapenv:Header/>
+  <soapenv:Body>
+    <vfde:LegacySearch>
+      <CustomerID>${customerId}</CustomerID>
+    </vfde:LegacySearch>
   </soapenv:Body>
 </soapenv:Envelope>`
 }
