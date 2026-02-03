@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { Bell, ChevronDown } from "lucide-react"
+import { ChevronDown } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { LogViewer } from "./log-viewer"
@@ -31,14 +31,8 @@ export function Header({ title, description }: HeaderProps) {
           )}
         </div>
 
-        {/* Right side: Notification, Avatar, Env */}
+        {/* Right side: Avatar, Env */}
         <div className="flex items-center gap-4">
-          {/* Notification */}
-          <Button variant="ghost" size="icon" className="relative">
-            <Bell className="h-5 w-5" />
-            <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-primary" />
-          </Button>
-
           {/* Avatar */}
           <Avatar className="h-8 w-8">
             <AvatarFallback className="bg-secondary text-foreground text-xs">
