@@ -11,6 +11,8 @@ import {
   BarChart3,
   Settings,
   Bot,
+  BookOpen,
+  FolderArchive,
 } from "lucide-react"
 
 const navigation = [
@@ -20,6 +22,8 @@ const navigation = [
   { name: "Test Cases", href: "/test-cases", icon: FileText },
   { name: "Analytics", href: "/analytics", icon: BarChart3 },
   { name: "Progress Calculation", href: "/progress-calculation", icon: BarChart3 },
+  { name: "Project KT", href: "/project-kt", icon: BookOpen },
+  { name: "Documentation", href: "/documentation", icon: FolderArchive },
 ]
 
 export function Sidebar() {
