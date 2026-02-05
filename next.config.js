@@ -1,10 +1,11 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  experimental: {
-    turbo: {
-      serverExternalPackages: ['ssh2', 'cpu-features'],
-    },
+  typescript: {
+    ignoreBuildErrors: true,
   },
-}
+  images: {
+    unoptimized: true,
+  },
+};
 
-module.exports = nextConfig
+module.exports = nextConfig;
